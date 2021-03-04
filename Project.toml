@@ -1,0 +1,6 @@
+name = "Peatland"
+uuid = "7a7ea350-7cdb-11eb-2f7d-8df01d5146c3"
+version = "0.1.0"
+
+[deps]
+Simulation = "ed2dc23b-ada4-5fdb-a26f-56368a14ad8f"
