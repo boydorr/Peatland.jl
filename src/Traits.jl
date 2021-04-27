@@ -1,4 +1,4 @@
-import Simulation: ContinuousTrait
+import EcoSISTEM: ContinuousTrait
 
 """
     GaussTrait{C <: Number} <: ContinuousTrait{C}

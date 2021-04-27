@@ -1,7 +1,7 @@
-using Simulation
+using EcoSISTEM
 using Unitful
 using Unitful.DefaultSymbols
-import Simulation: GridAbioticEnv, ContinuousHab, AbstractEcosystem, HabitatUpdate, cancel, checkbud, matchdict
+import EcoSISTEM: GridAbioticEnv, ContinuousHab, AbstractEcosystem, HabitatUpdate, cancel, checkbud, matchdict
 
 function Drying(eco::E, hab::ContinuousHab, timestep::Unitful.Time) where E <: AbstractEcosystem
   val = hab.change.rate
