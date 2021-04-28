@@ -10,6 +10,17 @@ mutable struct Invasive <: AbstractStateTransition
     prob::DayType
 end
 
+function _run_rule!(eco::Ecosystem, rule::Invasive, timestep::Unitful.Time)
+    rng = eco.abundances.rngs[Threads.threadid()]
+    spp = getspecies(rule)
+    loc = getlocation(rule)
+    prob = getprob(rule)
+    eco.spplist.species.traits.var[spp] = maximum(eco.spplist.species.traits.var)
+    invasive_abun = eco.spplist.species.abun[spp]
+    avgain = uconvert(NoUnits, prob * timestep) / size(eco.abundances.matrix, 2)
+    gains = rand(Poisson(avgain))
+    eco.abundances.matrix[spp, loc] += gains
+end
 
 function _run_rule!(eco::Ecosystem, rule::Invasive, timestep::Unitful.Time)
     rng = eco.abundances.rngs[Threads.threadid()]
@@ -18,9 +29,7 @@ function _run_rule!(eco::Ecosystem, rule::Invasive, timestep::Unitful.Time)
     prob = getprob(rule)
     eco.spplist.species.traits.var[spp] = maximum(eco.spplist.species.traits.var)
     invasive_abun = eco.spplist.species.abun[spp]
-    avgain = uconvert(NoUnits, prob * timestep)
+    avgain = uconvert(NoUnits, prob * timestep) / size(eco.abundances.matrix, 2)
     gains = rand(Poisson(avgain))
-    pos = 1:size(eco.abundances.matrix, 2)
-    smp = sample(pos, gains)
-    eco.abundances.grid[spp, smp] .+= 1
+    eco.abundances.matrix[spp, loc] += gains
 end

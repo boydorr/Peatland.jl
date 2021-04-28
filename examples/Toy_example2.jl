@@ -25,9 +25,9 @@ kernel = fill(GaussianKernel(10.0m, 10e-10), numSpecies)
 movement = BirthOnlyMovement(kernel, Torus())
 
 # Create species list, including their temperature preferences, seed abundance and native status
-pref1 = 100.0m^3; pref2 = 10.0m^3
+pref1 = 100.0m^3; pref2 = 50.0m^3
 opts = [pref1, pref2]
-vars = [50.0m^3, 1.0m^3]
+vars = [10.0m^3, 10.0m^3]
 traits = GaussTrait(opts, vars)
 native = [true, false]
 # abun = rand(Multinomial(individuals, numSpecies))
@@ -45,12 +45,14 @@ rel = Gauss{typeof(1.0m^3)}()
 transitions = create_transition_list()
 addtransition!(transitions, UpdateEnergy(update_energy_usage!))
 addtransition!(transitions, UpdateEnvironment(update_environment!))
-for spp in eachindex(sppl.species.names) 
-    for loc in eachindex(abenv.habitat.matrix)
+for loc in eachindex(abenv.habitat.matrix)
+    for spp in eachindex(sppl.species.names) 
         addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
         addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
         addtransition!(transitions, SeedDisperse(spp, loc))
     end
+    addtransition!(transitions, Invasive(1, loc, 1.0/28days))
+    addtransition!(transitions, Invasive(2, loc, 1.0/28days))
 end
 
 # Create ecosystem
@@ -59,7 +61,7 @@ eco.abundances.matrix[2, :] .= 0
 
 # Run simulation
 # Simulation Parameters
-burnin = 2year; times1 = 6months; times2 = 1year; timestep = 1day;
+burnin = 2year; times1 = 5year; times2 = 5year; timestep = 1day;
 record_interval = 1day; repeats = 1
 lensim1 = length(0years:record_interval:times1)
 lensim2 = length(0years:record_interval:times2)
@@ -68,17 +70,10 @@ abuns2 = generate_storage(eco, lensim2, 1)
 # Burnin
 @time simulate!(eco, burnin, timestep)
 
-for loc in eachindex(abenv.habitat.matrix)
-    addtransition!(transitions, Invasive(1, loc, 1.0/7days))
-    addtransition!(transitions, Invasive(2, loc, 1.0/7days))
-end
-eco.abenv.habitat.change.rate = -10.0m^3/month
+eco.abenv.habitat.change.rate = -1.0m^3/month
 
 @time simulate_record!(abuns1, eco, times1, record_interval, timestep)
-eco.abenv.habitat.change.rate = 10.0m^3/month
-# for loc in eachindex(abenv.habitat.matrix)
-#     addtransition!(transitions, Invasive(1, loc, 1.0/7days))
-# end
+eco.abenv.habitat.change.rate = 1.0m^3/month
 @time simulate_record!(abuns2, eco, times2, record_interval, timestep)
 
 abuns = cat(abuns1, abuns2, dims = 3)
