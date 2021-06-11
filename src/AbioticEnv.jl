@@ -3,11 +3,12 @@ using Unitful
 using Unitful.DefaultSymbols
 import EcoSISTEM: GridAbioticEnv, ContinuousHab, AbstractEcosystem, HabitatUpdate, cancel, checkbud, matchdict
 
-function Drying(eco::E, hab::ContinuousHab, timestep::Unitful.Time) where E <: AbstractEcosystem
+function Drying(eco::E, hab::ContinuousHab, timestep::Unitful.Time,
+  thresh::Unitful.Volume = 0.0m^3) where E <: AbstractEcosystem
   val = hab.change.rate
   v = uconvert(m^3/unit(timestep), val)
   hab.matrix .+= v * timestep
-  hab.matrix[hab.matrix .< 0.0m^3] .= 0.0m^3
+  hab.matrix[hab.matrix .< thresh] .= thresh
 end
 
 function peatland_habitat(val::Unitful.Quantity, size::Unitful.Length, dim::Tuple{Int64, Int64})

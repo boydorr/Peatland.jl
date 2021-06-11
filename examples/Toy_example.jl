@@ -51,7 +51,7 @@ for loc in eachindex(abenv.habitat.matrix)
         addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
         addtransition!(transitions, SeedDisperse(spp, loc))
     end
-    addtransition!(transitions, Invasive(2, loc, 1.0/28days))
+    addtransition!(transitions, Invasive(2, loc, 1.0/month))
 end
 
 # Create ecosystem
@@ -84,3 +84,4 @@ abuns = reshape(abuns, (numSpecies, grid[1], grid[2], lensim * 2, repeats))
 plot(sum(abuns[1, :, :, :, 1], dims = (1,2))[1, 1, :], grid = false, label = "Moss")
 plot!(sum(abuns[2, :, :, :, 1], dims = (1,2))[1, 1, :], label = "Shrub")
 vline!([lensim], color = :black, linestyle = :dash, label = "Intervention")
+Plots.pdf("plots/Peatland_example.pdf")
