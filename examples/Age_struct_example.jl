@@ -97,10 +97,12 @@ abuns = reshape(abuns, (numSpecies * numAgeClasses, grid[1], grid[2], lensim * 2
 # end
 # gif(anim, fps = 30)
 
-plot(sum(abuns[1, :, :, :, 1], dims = (1,2))[1, 1, :], grid = false, label = "Moss gametophyte")
-plot!(sum(abuns[2, :, :, :, 1], dims = (1,2))[1, 1, :], label = "Moss sporophyte")
-plot!(sum(abuns[3, :, :, :, 1], dims = (1,2))[1, 1, :], label = "Shrub seedling")
-plot!(sum(abuns[4, :, :, :, 1], dims = (1,2))[1, 1, :], label = "Shrub mature")
-
+plot(grid = false)
+for i in eachindex(sppl.species.names)
+display(plot!(sum(abuns[i, :, :, :, 1], dims = (1,2))[1, 1, :], label = sppl.species.names[i]))
+end
 vline!([lensim], color = :black, linestyle = :dash, label = "Drying")
+
 Plots.pdf("plots/Peatland_age_example.pdf")
+
+@time simulate!(eco, 1year, 1day)
