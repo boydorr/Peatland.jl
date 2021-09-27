@@ -10,4 +10,10 @@ export Invasive, WindDispersal
 include("AgeStructure.jl")
 export Ageing
 
+include("Dispersal.jl")
+export PeatLookup
+
+include("PeatSystem.jl")
+export Ecosystem
+
 end

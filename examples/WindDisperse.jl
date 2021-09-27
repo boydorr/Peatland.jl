@@ -53,8 +53,10 @@ for loc in eachindex(abenv.habitat.matrix)
     end
 end
 
+lookup = PeatLookup(collect(1:100), collect(1:100), 100)
+
 # Create ecosystem
-eco = Ecosystem(sppl, abenv, rel, transitions = transitions)
+eco = Ecosystem(sppl, abenv, rel, lookup, transitions = transitions)
 eco.abundances.matrix[1, :] .= 0
 eco.abundances.matrix[1, 1] = 10
 # Run simulation
@@ -74,6 +76,7 @@ end
 gif(anim, "wind_disperse.gif", fps = 50)
 
 eco = Ecosystem(sppl, abenv, rel, transitions = transitions)
+eco.lookup = PeatLookup()
 eco.abundances.matrix[1, :] .= 0
 eco.abundances.matrix[1, 1] = 100
 eco.transitions.place[1].windspeed = 10m/s
