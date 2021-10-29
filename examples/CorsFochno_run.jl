@@ -29,7 +29,7 @@ param = EqualPop(birth, death, longevity, survival, boost)
 
 # Create kernel for movement
 kernel = fill(GaussianKernel(100.0m, 10e-10), numSpecies)
-movement = BirthOnlyMovement(kernel, Torus())
+movement = BirthOnlyMovement(kernel, NoBoundary())
 
 # Create species list, including their temperature preferences, seed abundance and native status
 pref1 = rand(Normal(100.0, 0.1), numMoss) .* m^3 
@@ -76,18 +76,21 @@ lensim1 = length(0years:record_interval:times1)
 lensim2 = length(0years:record_interval:times2)
 abuns1 = generate_storage(eco, lensim1, 1)
 abuns2 = generate_storage(eco, lensim2, 1)
+abuns3 = generate_storage(eco, lensim2, 1)
 # Burnin
 @time simulate!(eco, burnin, timestep)
 
 eco.abenv.habitat.change.rate = -1.0m^3/month
 
 @time simulate_record!(abuns1, eco, times1, record_interval, timestep);
-eco.abenv.habitat.change.rate = 1.0m^3/month
+eco.abenv.habitat.change.rate = 0.0m^3/month
 @time simulate_record!(abuns2, eco, times2, record_interval, timestep);
+eco.abenv.habitat.change.rate = 1.0m^3/month
+@time simulate_record!(abuns3, eco, times2, record_interval, timestep);
 
-abuns = cat(abuns1, abuns2, dims = 3)
-abuns = reshape(abuns, (numSpecies, grid[1], grid[2], lensim1 + lensim2, repeats))
+abuns = cat(abuns1, abuns2, abuns3, dims = 3)
+abuns = reshape(abuns, (numSpecies, grid[1], grid[2], lensim1 + lensim2 *2, repeats))
 
 plot(sum(abuns[1:numMoss, :, :, :, 1], dims = (1,2,3))[1, 1, 1, :], grid = false, label = "Moss")
 plot!(sum(abuns[numMoss+1:end, :, :, :, 1], dims = (1,2,3))[1, 1, 1, :], label = "Shrub")
-vline!([lensim1], color = :black, linestyle = :dash, label = "Intervention")
+vline!([lensim1 + lensim2], color = :black, linestyle = :dash, label = "Intervention")
