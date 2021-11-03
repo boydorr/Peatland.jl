@@ -1,6 +1,7 @@
 using EcoSISTEM: AbstractAbiotic
 using EcoSISTEM
 using SparseArrays
+using Random
 
 import EcoSISTEM: AbstractLookup
 
@@ -30,19 +31,19 @@ function peatmove!(eco::AbstractEcosystem, id::Int64, pos::Int64, grd::Array{Flo
     # Add in home movements
     wind = eco.lookup.wind
     if newseed > zero(newseed)
-        for nzi in wind.colptr[pos]:(wind.colptr[pos+1]-1)
+        for nzi in 1:wind.n
             grd[id, wind.rowval[nzi]] += newseed * wind.nzval[nzi]
         end
     end
-
+    eco.lookup.wind.nzval .= 0.0
     # Add in work movements
     animal = eco.lookup.animal
     if newseed > zero(newseed)
-        for nzi in animal.colptr[pos]:(animal.colptr[pos+1]-1)
+        for nzi in 1:animal.n
             grd[id, animal.rowval[nzi]] += newseed * animal.nzval[nzi]
         end
     end
-
+    eco.lookup.animal.nzval .= 0.0
     return eco
 end
 
@@ -51,7 +52,8 @@ function _run_rule!(eco::Ecosystem, rule::WindDispersal)
     loc = getlocation(rule)
     spp = getspecies(rule)
     mov = eco.spplist.species.movement.kernels[spp]
-    gridsize = getgridsize(eco)
+    sd = (2 * mov.dist) / sqrt(pi)
+    gridsize = getgridsize(eco)/sd
     p = mov.thresh
     μ = (rule.plantheight) * (rule.windspeed / rule.terminalvelocity)
     σ_w = 0.5 * rule.windspeed
@@ -66,14 +68,17 @@ function _run_rule!(eco::Ecosystem, rule::WindDispersal)
     xys = convert_coords.(grid_locs, size(eco.abenv.active, 2))
 
     # Calculate lookup probabilities for each grid location
-    locs, probs = genlookups(loc, grid_locs, xys, gridsize, p, λ, μ)
+    locs, probs = Peatland.genlookups(loc, grid_locs, xys, gridsize, p, λ, μ)
     eco.lookup.wind.nzval[locs] .= probs
+
+    # Perform movement
+    peatmove!(eco, spp, loc, eco.cache.netmigration, eco.cache.seedbank[spp, loc])
 end
 
-function genlookups(from::Int64, to::Vector{Int64}, xys::Array{Tuple{Int64,Int64},1}, relsize::Unitful.Length, thresh::Float64, λ::Unitful.Length, μ::Unitful.Length)
+function genlookups(from::Int64, to::Vector{Int64}, xys::Array{Tuple{Int64,Int64},1}, relsize::Float64, thresh::Float64, λ::Unitful.Length, μ::Unitful.Length)
     x, y = xys[to .== from][1]
-    maxX = ceil(Int64, x + 1.0km/relsize) |> NoUnits; minX = ceil(Int64, x - 1.0km/relsize) |> NoUnits
-    maxY = floor(Int64, y + 1.0km/relsize) |> NoUnits; minY = floor(Int64, y - 1.0km/relsize) |> NoUnits
+    maxX = ceil(Int64, x + 1.0/relsize) |> NoUnits; minX = ceil(Int64, x - 1.0/relsize) |> NoUnits
+    maxY = floor(Int64, y + 1.0/relsize) |> NoUnits; minY = floor(Int64, y - 1.0/relsize) |> NoUnits
     keep = [(i[1] <= maxX) & (i[2] <= maxY) & (i[1] >= minX) & (i[2] >= minY) for i in xys]
     to = to[keep]
     probs = [_lookup((x = x, y = y), (x = i[1], y = i[2]), relsize, _wald, λ, μ) for i in xys[keep]]
@@ -83,10 +88,10 @@ function genlookups(from::Int64, to::Vector{Int64}, xys::Array{Tuple{Int64,Int64
     return to[keep], probs
 end
 
-function _lookup(from::NamedTuple, to::NamedTuple, relSquareSize::Unitful.Length, dispersalfn::F, λ::Unitful.Length, μ::Unitful.Length) where {F<:Function}
+function _lookup(from::NamedTuple, to::NamedTuple, relSquareSize::Float64, dispersalfn::F, λ::Unitful.Length, μ::Unitful.Length) where {F<:Function}
     λ1 = λ / 1.0km |> NoUnits; 
     μ1 = μ / 1.0km |> NoUnits; 
-    (relSquareSize /= 1.0km) |> NoUnits
+    #(relSquareSize /= 1.0km) |> NoUnits
     return hcubature(r -> dispersalfn(r, λ1, μ1),
       [from.y *relSquareSize - relSquareSize, from.x * relSquareSize - relSquareSize, to.y * relSquareSize - relSquareSize, to.x * relSquareSize - relSquareSize],
       [from.y * relSquareSize, from.x * relSquareSize, to.y * relSquareSize, to.x * relSquareSize],

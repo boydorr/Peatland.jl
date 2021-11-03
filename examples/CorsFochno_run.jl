@@ -64,17 +64,18 @@ for loc in active_squares
     addtransition!(transitions, Invasive(2, loc, 100.0/28days))
 end
 
+
 # Create ecosystem
 eco = Ecosystem(sppl, abenv, rel, transitions = transitions)
 eco.abundances.matrix[2, :] .= 0
 
 # Run simulation
 # Simulation Parameters
-burnin = 5year; times1 = 5year; times2 = 5year; timestep = 1month;
+burnin = 10year; times1 = 5year; times2 = 5year; timestep = 1month;
 record_interval = 1month; repeats = 1
 lensim1 = length(0years:record_interval:times1)
 lensim2 = length(0years:record_interval:times2)
-abuns1 = generate_storage(eco, lensim1, 1)
+abuns1 = generate_storage(eco, lensim1, 1)[:, :, :, 1]
 abuns2 = generate_storage(eco, lensim2, 1)
 abuns3 = generate_storage(eco, lensim2, 1)
 # Burnin
@@ -82,7 +83,8 @@ abuns3 = generate_storage(eco, lensim2, 1)
 
 eco.abenv.habitat.change.rate = -1.0m^3/month
 
-@time simulate_record!(abuns1, eco, times1, record_interval, timestep);
+@time simulate_record!(abuns1, eco, times1, record_interval, timestep,
+save = true);
 eco.abenv.habitat.change.rate = 0.0m^3/month
 @time simulate_record!(abuns2, eco, times2, record_interval, timestep);
 eco.abenv.habitat.change.rate = 1.0m^3/month
@@ -91,6 +93,10 @@ eco.abenv.habitat.change.rate = 1.0m^3/month
 abuns = cat(abuns1, abuns2, abuns3, dims = 3)
 abuns = reshape(abuns, (numSpecies, grid[1], grid[2], lensim1 + lensim2 *2, repeats))
 
-plot(sum(abuns[1:numMoss, :, :, :, 1], dims = (1,2,3))[1, 1, 1, :], grid = false, label = "Moss")
-plot!(sum(abuns[numMoss+1:end, :, :, :, 1], dims = (1,2,3))[1, 1, 1, :], label = "Shrub")
+plot(sum(abuns[1:numMoss, :, :, :, 1], dims = (1,2,3))[1, 1, 1, :], grid = false, label = "",
+layout = (2, 1))
+plot!(sum(abuns[numMoss+1:end, :, :, :, 1], dims = (1,2,3))[1, 1, 1, :], label = "",
+subplot = 2, color = 2, grid = false)
 vline!([lensim1 + lensim2], color = :black, linestyle = :dash, label = "Intervention")
+vline!([lensim1 + lensim2], color = :black, linestyle = :dash, label = "",
+subplot = 2)
