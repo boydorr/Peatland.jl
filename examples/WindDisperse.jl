@@ -49,7 +49,7 @@ for loc in eachindex(abenv.habitat.matrix)
     for spp in eachindex(sppl.species.names) 
         addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
         addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
-        addtransition!(transitions, WindDispersal(spp, loc, 1.0m, 0.3, 1.0m, 1.0m/s, 0.1m/s))
+        addtransition!(transitions, WindDispersal(spp, loc, 1.0m, 0.3, 1.0m, 1.0m/s, 1.0m/s))
     end
 end
 
