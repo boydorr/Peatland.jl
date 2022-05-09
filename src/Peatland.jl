@@ -5,7 +5,7 @@ include("AbioticEnv.jl")
 export peatlandAE
 
 include("Scenarios.jl")
-export Invasive, WindDispersal, WaterUse, WaterFlux, Dry
+export Invasive, WindDispersal, WaterUse, WaterFlux, Dry, Rewet, LateralFlow, changerate!
 
 include("AgeStructure.jl")
 export Ageing
