@@ -3,7 +3,7 @@ using EcoSISTEM
 using SparseArrays
 using Random
 
-import EcoSISTEM: AbstractLookup
+import EcoSISTEM: AbstractLookup, getdimension, convert_coords, getlookup, calc_lookup_moves!
 
 
 mutable struct PeatLookup <: AbstractLookup
@@ -96,4 +96,23 @@ function _lookup(from::NamedTuple, to::NamedTuple, relSquareSize::Float64, dispe
       [from.y *relSquareSize - relSquareSize, from.x * relSquareSize - relSquareSize, to.y * relSquareSize - relSquareSize, to.x * relSquareSize - relSquareSize],
       [from.y * relSquareSize, from.x * relSquareSize, to.y * relSquareSize, to.x * relSquareSize],
       maxevals= 100, rtol = 0.01)[1]
+end
+
+function move!(eco::AbstractEcosystem, ::BirthOnlyMovement, i::Int64, sp::Int64,
+    grd::Array{Float64, 2}, births::Int64)
+  width, height = getdimension(eco)
+  (x, y) = convert_coords(eco, i, width)
+   lookup = getlookup(eco, sp)
+  calc_lookup_moves!(getboundary(eco.spplist.species.movement), x, y, sp, eco, births)
+  # Lose moves from current grid square
+  grd[sp, i] -= births
+  # Map moves to location in grid
+  mov = lookup.moves
+  for i in eachindex(lookup.x)
+      newx = mod(lookup.x[i] + x - 1, width) + 1
+      newy = mod(lookup.y[i] + y - 1, height) + 1
+      loc = convert_coords(eco, (newx, newy), width)
+      grd[sp, loc] += mov[i]
+  end
+  return eco
 end
