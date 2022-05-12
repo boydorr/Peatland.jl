@@ -1,6 +1,7 @@
 import EcoSISTEM: Ecosystem, AbstractTraitRelationship, 
 emptygridlandscape, create_cache, AbstractCache, numrequirements,
-_invalidatecaches!, invalidatecaches!, budgetupdate!, habitatupdate!, genlookups, getkernels, SpeciesLookup
+_invalidatecaches!, invalidatecaches!, budgetupdate!, habitatupdate!, genlookups, getkernels, SpeciesLookup,
+_getdimension
 using Distributions
 """
   PeatCache
@@ -22,7 +23,7 @@ function create_peat_cache(abenv::A, sppl::SpeciesList{SpeciesTypes{TR, R, MO, T
   ml::GridLandscape) where {A <: AbstractAbiotic, TR, R, MO <: BirthOnlyMovement, T}
 nm = zeros(Float64, size(ml.matrix))
 sb = zeros(Int64, size(ml.matrix))
-wm = zeros(typeof(1.0m^3), size(abenv.habitat.matrix))
+wm = zeros(typeof(1.0m^3), _getdimension(abenv.habitat))
 totalE = zeros(Float64, (size(ml.matrix, 2), numrequirements(typeof(sppl.species.requirement))))
 return PeatCache(nm, sb, wm, totalE, false)
 end
@@ -78,7 +79,8 @@ end
   rng = eco.abundances.rngs[Threads.threadid()]
   eco.abundances.matrix .+= rand.(rng, Poisson.(eco.cache.netmigration))
   
-  eco.abenv.habitat.matrix .+= eco.cache.watermigration
+  hab = getsoilwater(eco.abenv)
+  hab .+= eco.cache.watermigration
 
   # Invalidate all caches for next update
   invalidatecaches!(eco)

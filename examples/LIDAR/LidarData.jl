@@ -3,6 +3,7 @@ using Plots
 using Statistics
 using RCall
 using Shapefile
+using GeoInterface
 R"
 library(rgdal)
 library(rgeos)
