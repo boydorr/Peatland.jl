@@ -4,3 +4,9 @@
 *.jld2
 *.csv
 *.tree
+*.shp
+*.cpg
+*.dbf
+*.prj
+*.shx
+*.qmd
