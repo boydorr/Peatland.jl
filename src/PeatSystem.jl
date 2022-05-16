@@ -28,44 +28,26 @@ totalE = zeros(Float64, (size(ml.matrix, 2), numrequirements(typeof(sppl.species
 return PeatCache(nm, sb, wm, totalE, false)
 end
 
-function Ecosystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticEnv,
-    rel::AbstractTraitRelationship, lookup::PeatLookup; transitions::Union{Nothing, TransitionList} = nothing) where {F<:Function, T, Req}
+function PeatSystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticEnv,
+    rel::AbstractTraitRelationship, lookup::Union{Missing, PeatLookup} = missing; transitions::Union{Nothing, TransitionList} = nothing) where {F<:Function, T, Req}
  
      # Create matrix landscape of zero abundances
    ml = emptygridlandscape(abenv, spplist)
    # Populate this matrix with species abundances
    popfun(ml, spplist, abenv, rel)
    cache = create_peat_cache(abenv, spplist, ml)
+   if ismissing(lookup)
+    lookup = SpeciesLookup(collect(map(k -> EcoSISTEM.genlookups(abenv.habitat, k), getkernels(spplist.species.movement))))
+   end
 
    return Ecosystem{typeof(ml), typeof(abenv), typeof(spplist), typeof(rel), typeof(lookup), typeof(cache)}(ml, spplist, abenv,
    missing, rel, lookup, cache, transitions)
  end
 
- function Ecosystem(spplist::SpeciesList, abenv::GridAbioticEnv,
-    rel::AbstractTraitRelationship, lookup::PeatLookup; transitions::Union{Nothing, TransitionList} = nothing)
-    return Ecosystem(populate!, spplist, abenv, rel, lookup, transitions = transitions)
+ function PeatSystem(spplist::SpeciesList, abenv::GridAbioticEnv,
+    rel::AbstractTraitRelationship, lookup::Union{Missing, PeatLookup} = missing; transitions::Union{Nothing, TransitionList} = nothing)
+    return PeatSystem(populate!, spplist, abenv, rel, lookup, transitions = transitions)
  end
-
- function Ecosystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticEnv,
-  rel::AbstractTraitRelationship; transitions::Union{Nothing, TransitionList} = nothing, peatcache::Bool = true) where {F<:Function, T, Req}
-
-   # Create matrix landscape of zero abundances
- ml = emptygridlandscape(abenv, spplist)
- # Populate this matrix with species abundances
- popfun(ml, spplist, abenv, rel)
- if peatcache
-    cache = create_peat_cache(abenv, spplist, ml)
- end
- lookup = SpeciesLookup(collect(map(k -> EcoSISTEM.genlookups(abenv.habitat, k), getkernels(spplist.species.movement))))
- 
- return Ecosystem{typeof(ml), typeof(abenv), typeof(spplist), typeof(rel), typeof(lookup), typeof(cache)}(ml, spplist, abenv,
- missing, rel, lookup, cache, transitions)
-end
-
-function Ecosystem(spplist::SpeciesList, abenv::GridAbioticEnv,
-  rel::AbstractTraitRelationship; transitions::Union{Nothing, TransitionList} = nothing, peatcache::Bool = true)
-  return Ecosystem(populate!, spplist, abenv, rel, transitions = transitions, peatcache = peatcache)
-end
 
  function _invalidatecaches!(eco::Ecosystem, cache::PeatCache)
   eco.ordinariness = missing

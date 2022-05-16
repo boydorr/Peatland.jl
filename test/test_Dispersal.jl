@@ -56,7 +56,7 @@ end
 lookup = PeatLookup(collect(1:100), collect(1:100), 100)
 
 # Create ecosystem
-eco = Ecosystem(sppl, abenv, rel, lookup, transitions = transitions)
+eco = PeatSystem(sppl, abenv, rel, lookup, transitions = transitions)
 eco.abundances.matrix[1, :] .= 0
 eco.abundances.matrix[1, 1] = 100
 # Run simulation

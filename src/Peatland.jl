@@ -14,6 +14,6 @@ include("Dispersal.jl")
 export PeatLookup
 
 include("PeatSystem.jl")
-export Ecosystem, update_peat_environment!
+export PeatSystem, update_peat_environment!
 
 end

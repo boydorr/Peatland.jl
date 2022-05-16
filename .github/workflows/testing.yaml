@@ -9,7 +9,7 @@ on:
   pull_request:
 
 jobs:
-  EcoSISTEM-tests:
+  Peatland-tests:
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     strategy:

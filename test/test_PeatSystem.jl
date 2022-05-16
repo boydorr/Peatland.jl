@@ -56,7 +56,8 @@ for loc in eachindex(abenv.habitat.matrix)
 end
 
 # Create ecosystem
-@test_nowarn eco = Ecosystem(sppl, abenv, rel, transitions = transitions, peatcache = true)
+@test_nowarn eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
+eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
 eco.cache.netmigration .+= 1
 eco.cache.watermigration .+= 1.0m^3
 Peatland.update_peat_environment!(eco, 1month)
