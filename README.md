@@ -13,7 +13,7 @@ This codebase provides example runs for the NERC Landscape Decisions Project: Si
 
 The underlying simulation code for this project can be found at [Simulation.jl](https://github.com/boydorr/Simulation.jl).
 
-[actions-img]: https://github.com/boydorr/Peatland.jl/workflows/testing.yaml/badge.svg?branch=main
+[actions-img]: https://github.com/boydorr/Peatland.jl/actions/workflows/testing.yaml/badge.svg
 [actions-url]: https://github.com/boydorr/Peatland.jl/actions
 
 [codecov-img]: https://codecov.io/gh/boydorr/Peatland.jl/branch/main/graph/badge.svg
