@@ -3,6 +3,8 @@ using EcoSISTEM.Units
 using Peatland
 using Unitful, Unitful.DefaultSymbols
 
+import EcoSISTEM: getprob, getspecies, getlocation
+
 @testset "Basic scenarios" begin
     spp = 1; loc = 1; prob = 1.0/day
     
