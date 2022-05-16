@@ -12,7 +12,7 @@ a matrix of current resource used in the Ecosystem, `totalE`,
 and a Bool to say if these caches are `valid`.
 """
 mutable struct PeatCache <: AbstractCache
-  netmigration::Array{Int64, 2}
+  netmigration::Array{Float64, 2}
   seedbank::Array{Int64, 2}
   watermigration::Array{Unitful.Volume, 2}
   totalE::Matrix{Float64}
@@ -47,7 +47,7 @@ function Ecosystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticEn
  end
 
  function Ecosystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticEnv,
-  rel::AbstractTraitRelationship; transitions::Union{Nothing, TransitionList} = nothing, peatcache::Bool = false) where {F<:Function, T, Req}
+  rel::AbstractTraitRelationship; transitions::Union{Nothing, TransitionList} = nothing, peatcache::Bool = true) where {F<:Function, T, Req}
 
    # Create matrix landscape of zero abundances
  ml = emptygridlandscape(abenv, spplist)
@@ -63,7 +63,7 @@ function Ecosystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticEn
 end
 
 function Ecosystem(spplist::SpeciesList, abenv::GridAbioticEnv,
-  rel::AbstractTraitRelationship; transitions::Union{Nothing, TransitionList} = nothing, peatcache::Bool = false)
+  rel::AbstractTraitRelationship; transitions::Union{Nothing, TransitionList} = nothing, peatcache::Bool = true)
   return Ecosystem(populate!, spplist, abenv, rel, transitions = transitions, peatcache = peatcache)
 end
 

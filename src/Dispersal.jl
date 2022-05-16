@@ -3,7 +3,8 @@ using EcoSISTEM
 using SparseArrays
 using Random
 
-import EcoSISTEM: AbstractLookup, getdimension, convert_coords, getlookup, calc_lookup_moves!
+import EcoSISTEM: AbstractLookup, getdimension, convert_coords, getlookup, calc_lookup_moves!,
+move!, getboundary, calc_lookup_moves!
 
 
 mutable struct PeatLookup <: AbstractLookup
