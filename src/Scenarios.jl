@@ -45,12 +45,12 @@ function _wald(r, λ, μ)
     return (λ/(2*π*d^3))^0.5 * exp(-(λ*(d-μ)^2)/(2*μ^2*d))
    end
 
-mutable struct WaterFlux <: AbstractSetUp
+mutable struct WaterFlux <: AbstractPlaceTransition
     location::Int64
     prob::DayType
 end
 
-mutable struct Dry <: AbstractWindDown
+mutable struct Dry <: AbstractPlaceTransition
     location::Int64
     prob::Float64
     length::Unitful.Time
@@ -77,7 +77,7 @@ function Dry(location::Int64, prob::Float64, length::Unitful.Time)
     return Dry(location, prob, length, 1month)
 end
 
-mutable struct Rewet <: AbstractWindDown
+mutable struct Rewet <: AbstractPlaceTransition
     location::Int64
     prob::Float64
     length::Unitful.Time
@@ -88,28 +88,35 @@ function Rewet(location::Int64, prob::Float64, length::Unitful.Time, max::Unitfu
     return Rewet(location, prob, length, 1month, max)
 end
 
-mutable struct WaterUse <: AbstractWindDown
+mutable struct WaterUse <: AbstractStateTransition
     species::Int64
     location::Int64
     soil_moisture_frac::Float64
 end
 
-mutable struct LateralFlow <: AbstractSetUp
+mutable struct LateralFlow <: AbstractPlaceTransition
     location::Int64
     neighbours::Matrix{Int64}
     boundaries::Vector{Float64}
+    elevation::Vector{Float64}
+    rate::Float64
 end
-function LateralFlow(abenv::GridAbioticEnv, location::Int64)
+function LateralFlow(abenv::GridAbioticEnv, ele::ContinuousHab, location::Int64, rate::Float64)
     width = size(abenv.habitat, 1)
     x, y = convert_coords(location, width)
     neighbours = get_neighbours(getsoilwater(abenv), x, y, 8)
     boundary_length = sqrt.((neighbours[:, 1] .- x).^2 + (neighbours[:, 2] .- y).^2)
-    return LateralFlow(location, neighbours, boundary_length)
+    elevation_diff = [(ele.matrix[neighbours[n, 1], neighbours[n, 2]] .- ele.matrix[x, y]) for n in 1:size(neighbours, 1)]
+    return LateralFlow(location, neighbours, boundary_length, elevation_diff, rate)
 end
 
-mutable struct Ditch <: AbstractSetUp
-    location::Int64
-    prob::Float64
+function LateralFlow(abenv::GridAbioticEnv, location::Int64, rate::Float64)
+    width = size(abenv.habitat, 1)
+    x, y = convert_coords(location, width)
+    neighbours = get_neighbours(getsoilwater(abenv), x, y, 8)
+    boundary_length = sqrt.((neighbours[:, 1] .- x).^2 + (neighbours[:, 2] .- y).^2)
+    elevation_diff = fill(1, size(neighbours, 1))
+    return LateralFlow(location, neighbours, boundary_length, elevation_diff, rate)
 end
 
 function _run_rule!(eco::Ecosystem, rule::LateralFlow, timestep::Unitful.Time)
@@ -120,7 +127,7 @@ function _run_rule!(eco::Ecosystem, rule::LateralFlow, timestep::Unitful.Time)
     for i in 1:size(neighbours, 1)
         width = size(hab, 1)
         nei_loc = convert_coords(neighbours[i, 1], neighbours[i, 2], width)
-        drainage = (hab[loc] - hab[nei_loc])/(20*boundaries[i])
+        drainage = rule.rate * rule.elevation[i] * (hab[loc] - hab[nei_loc])/(boundaries[i])
         eco.cache.watermigration[loc] -= drainage
         eco.cache.watermigration[nei_loc] += drainage
     end

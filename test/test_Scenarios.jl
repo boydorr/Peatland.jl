@@ -15,17 +15,17 @@ import EcoSISTEM: getprob, getspecies, getlocation
 
     rule = WaterFlux(loc, prob)
     @test getlocation(rule) == loc
-    @test getprob(rule) == prob
+    @test rule.prob == prob
 
-    len = 1year; time = 1month
-    rule = Dry(loc, prob, len, time)
+    len = 1year; time = 1month; flprob = 0.1
+    rule = Dry(loc, flprob, len, time)
     @test getlocation(rule) == loc
-    @test getprob(rule) == prob
+    @test rule.prob == flprob
 
-    len = 1year; time = 1month
-    rule = Rewet(loc, prob, len, time)
+    maxvol = 10.0m^3
+    rule = Rewet(loc, flprob, len, time, maxvol)
     @test getlocation(rule) == loc
-    @test getprob(rule) == prob
+    @test rule.prob == flprob
 
     frac = 0.1
     rule = WaterUse(spp, loc, frac)
