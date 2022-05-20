@@ -4,6 +4,7 @@ using Test
 using EcoSISTEM.Units
 using Peatland
 using AxisArrays
+import EcoSISTEM: getlocation
 
 grid = (5, 5)
 area = 25.0km^2
@@ -44,4 +45,12 @@ end
 
     @test EcoSISTEM._getsubcommunitynames(abenv) == abenv.names
     @test EcoSISTEM.getavailableenergy(abenv) == sum(abenv.budget.matrix)
+
+    loc = 1; prob = 0.1/day
+    rule = LateralFlow(abenv, loc, prob)
+    @test getlocation(rule) == loc
+    rule = LateralFlow(abenv, abenv.habitat.h2, loc, prob)
+    @test getlocation(rule) == loc
+    @test Peatland.getsoilwater(abenv) == abenv.habitat.h1.matrix
 end
+

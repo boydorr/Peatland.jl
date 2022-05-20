@@ -105,8 +105,6 @@ function move!(eco::AbstractEcosystem, ::BirthOnlyMovement, i::Int64, sp::Int64,
   (x, y) = convert_coords(eco, i, width)
    lookup = getlookup(eco, sp)
   calc_lookup_moves!(getboundary(eco.spplist.species.movement), x, y, sp, eco, births)
-  # Lose moves from current grid square
-  grd[sp, i] -= births
   # Map moves to location in grid
   mov = lookup.moves
   for i in eachindex(lookup.x)

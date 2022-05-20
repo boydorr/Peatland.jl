@@ -53,17 +53,17 @@ if length(notest) > 0
     end
 end
 
-# @testset "Canonical tests" begin
-#     println()
-#     @info "Running canonical tests ..."
-#     canonical_testbase = map(file -> replace(file, r"test_(.*).jl" => s"\1"),                        filter(str -> occursin(r"^test_.*\.jl$", str),
-#                                     readdir("canonical")))
-#     for t in canonical_testbase
-#         fn = "canonical/test_$t.jl"
-#         println("    * Testing $t.jl ...")
-#         include(fn)
-#     end
-# end
+@testset "Canonical tests" begin
+    println()
+    @info "Running canonical tests ..."
+    canonical_testbase = map(file -> replace(file, r"test_(.*).jl" => s"\1"),                        filter(str -> occursin(r"^test_.*\.jl$", str),
+                                    readdir("canonical")))
+    for t in canonical_testbase
+        fn = "canonical/test_$t.jl"
+        println("    * Testing $t.jl ...")
+        include(fn)
+    end
+end
 
 # @testset "Examples folder" begin
 #     println()
