@@ -3,7 +3,7 @@ using Unitful
 using Unitful.DefaultSymbols
 using AxisArrays
 import EcoSISTEM: GridAbioticEnv, ContinuousHab, AbstractEcosystem, 
-HabitatUpdate, cancel, checkbud, matchdict, NoChange
+HabitatUpdate, cancel, checkbud, matchdict, NoChange, AbstractHabitat, AbstractBudget
 
 
 function Drying(eco::E, hab::ContinuousHab, timestep::Unitful.Time,
@@ -32,75 +32,97 @@ end
          dimension::Tuple{Int64, Int64}, maxbud::Float64, area::Unitful.Area{Float64},
          active::Array{Bool, 2})
 """
-function peatlandAE(val::Union{Float64, Unitful.Quantity{Float64}},
-  dimension::Tuple{Int64, Int64}, maxbud::Unitful.Quantity{Float64}, area::Unitful.Area{Float64},
-  active::Array{Bool, 2})
+function peatlandAE(hab::H, active::Array{Bool, 2}, bud::B) where {H <: AbstractHabitat, B <: AbstractBudget}
+  return GridAbioticEnv{H, B}(hab, active, bud)
+end
+
+function _habitat_builder(val::Union{Float64, Unitful.Quantity{Float64}},
+  dimension::Tuple{Int64, Int64}, area::Unitful.Area{Float64})
   if typeof(val) <: Unitful.Area
       val = uconvert(m^3, val)
   end
   area = uconvert(km^2, area)
   gridsquaresize = sqrt(area / (dimension[1] * dimension[2]))
 
-  hab = peatland_habitat(val, gridsquaresize, dimension)
+  return peatland_habitat(val, gridsquaresize, dimension)
+end
+
+function _habitat_builder(ele::AxisArray, val::Union{Float64, Unitful.Quantity{Float64}})
+  if typeof(val) <: Unitful.Area
+    val = uconvert(m^3, val)
+  end
+  dimension = size(ele)
+  area = uconvert(km^2, step(ele.axes[1]) * step(ele.axes[2]) * prod(dimension))
+  gridsquaresize = sqrt(area / (dimension[1] * dimension[2]))
+
+  hab1 = peatland_habitat(val, gridsquaresize, dimension)
+  hab2 = elevation_habitat(ele, gridsquaresize)
+
+  return HabitatCollection2(hab1, hab2)
+end
+
+function _budget_builder(dimension::Tuple{Int64, Int64}, maxbud::Unitful.Quantity{Float64}, area::Unitful.Area{Float64})
   B = cancel(maxbud, area)
   bud = zeros(typeof(B), dimension)
   fill!(bud, B/(dimension[1]*dimension[2]))
   checkbud(B) || error("Unrecognised unit in budget")
   budtype = matchdict[unit(B)]
-  return GridAbioticEnv{typeof(hab), budtype}(hab, active, budtype(bud))
+  return budtype(bud)
+end
+
+function _budget_builder(ele::AxisArray, maxbud::Unitful.Quantity{Float64})
+  dimension = size(ele)
+  area = uconvert(km^2, step(ele.axes[1]) * step(ele.axes[2]) * prod(dimension))
+  B = cancel(maxbud, area)
+  bud = zeros(typeof(B), dimension)
+  fill!(bud, B/(dimension[1]*dimension[2]))
+  checkbud(B) || error("Unrecognised unit in budget")
+  budtype = matchdict[unit(B)]
+  return budtype(bud)
+end
+
+function peatlandAE(val::Union{Float64, Unitful.Quantity{Float64}},
+  dimension::Tuple{Int64, Int64}, maxbud::Unitful.Quantity{Float64}, area::Unitful.Area{Float64},
+  active::Array{Bool, 2})
+  hab = _habitat_builder(val, dimension, area)
+  bud = _budget_builder(dimension, maxbud, area)
+  return peatlandAE(hab, active, bud)
 end
 
 
 function peatlandAE(val::Union{Float64, Unitful.Quantity{Float64}},
   dimension::Tuple{Int64, Int64}, maxbud::Unitful.Quantity{Float64}, area::Unitful.Area{Float64})
-
   active = fill(true, dimension)
-  peatlandAE(val, dimension, maxbud, area, active)
+  return peatlandAE(val, dimension, maxbud, area, active)
 end
 
 function peatlandAE(ele::AxisArray, val::Union{Float64, Unitful.Quantity{Float64}}, 
   maxbud::Unitful.Quantity{Float64})
   active = Array(.!isnan.(Array(ele)))
-  if typeof(val) <: Unitful.Area
-    val = uconvert(m^3, val)
-  end
-  dimension = size(ele)
-  area = uconvert(km^2, step(ele.axes[1]) * step(ele.axes[2]) * prod(dimension))
-  gridsquaresize = sqrt(area / (dimension[1] * dimension[2]))
-
-  hab1 = peatland_habitat(val, gridsquaresize, dimension)
-  hab2 = elevation_habitat(ele, gridsquaresize)
-  hab = HabitatCollection2(hab1, hab2)
-
-  B = cancel(maxbud, area)
-  bud = zeros(typeof(B), dimension)
-  fill!(bud, B/(dimension[1]*dimension[2]))
-  checkbud(B) || error("Unrecognised unit in budget")
-  budtype = matchdict[unit(B)]
-  return GridAbioticEnv{typeof(hab), budtype}(hab, active, budtype(bud))
+  hab = _habitat_builder(ele, val)
+  bud = _budget_builder(ele, maxbud)
+  return peatlandAE(hab, active, bud)
 end
-
-
 
 function peatlandAE(ele::AxisArray, val::Union{Float64, Unitful.Quantity{Float64}}, 
   maxbud::Unitful.Quantity{Float64}, active::Array{Bool, 2})
-  if typeof(val) <: Unitful.Area
-    val = uconvert(m^3, val)
-  end
-  dimension = size(ele)
-  area = uconvert(km^2, step(ele.axes[1]) * step(ele.axes[2]) * prod(dimension))
-  gridsquaresize = sqrt(area / (dimension[1] * dimension[2]))
+  hab = _habitat_builder(ele, val)
+  bud = _budget_builder(ele, maxbud)
+  return peatlandAE(hab, active, bud)
+end
 
-  hab1 = peatland_habitat(val, gridsquaresize, dimension)
-  hab2 = elevation_habitat(ele, gridsquaresize)
-  hab = HabitatCollection2(hab1, hab2)
 
-  B = cancel(maxbud, area)
-  bud = zeros(typeof(B), dimension)
-  fill!(bud, B/(dimension[1]*dimension[2]))
-  checkbud(B) || error("Unrecognised unit in budget")
-  budtype = matchdict[unit(B)]
-  return GridAbioticEnv{typeof(hab), budtype}(hab, active, budtype(bud))
+function peatlandAE(ele::AxisArray, val::Union{Float64, Unitful.Quantity{Float64}}, 
+  bud::B) where B <: AbstractBudget
+  active = Array(.!isnan.(Array(ele)))
+  hab = _habitat_builder(ele, val)
+  return peatlandAE(hab, active, bud)
+end
+
+function peatlandAE(ele::AxisArray, val::Union{Float64, Unitful.Quantity{Float64}}, 
+  bud::B, active::Array{Bool, 2}) where B <: AbstractBudget
+  hab = _habitat_builder(ele, val)
+  return peatlandAE(hab, active, bud)
 end
 
 
