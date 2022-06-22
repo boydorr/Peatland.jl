@@ -55,7 +55,7 @@ for loc in eachindex(abenv.habitat.matrix)
 end
 
 # Create ecosystem
-eco = Ecosystem(sppl, abenv, rel, transitions = transitions)
+eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
 eco.abundances.matrix[2, :] .= 0
 
 # Run simulation

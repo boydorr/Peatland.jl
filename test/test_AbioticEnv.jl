@@ -51,6 +51,5 @@ end
     @test getlocation(rule) == loc
     rule = LateralFlow(abenv, abenv.habitat.h2, loc, prob)
     @test getlocation(rule) == loc
-    @test Peatland.getsoilwater(abenv) == abenv.habitat.h1.matrix
 end
 

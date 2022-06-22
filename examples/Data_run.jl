@@ -80,12 +80,12 @@ for loc in active_squares
             addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
         end
     end
-    addtransition!(transitions, LateralFlow(abenv, loc))
+    addtransition!(transitions, LateralFlow(abenv, loc, 1/600days))
     addtransition!(transitions, WaterFlux(loc, 0.625/month))
 end
 
 # Create ecosystem
-eco = Ecosystem(sppl, abenv, rel, transitions = transitions, peatcache = true)
+eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
 
 
 
