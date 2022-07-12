@@ -8,6 +8,8 @@ import EcoSISTEM: DayType, AbstractPlaceTransition, AbstractStateTransition, Abs
 AbstractAbiotic, _run_rule!, getspecies, getlocation, getprob, TimeType, Lookup, _getdimension,
 _symmetric_grid, move!, get_neighbours, convert_coords
 const WaterTimeType = typeof(1.0m^3/day)
+const VolType = typeof(1.0m^3)
+const LengthType = typeof(1.0m)
 
 """
     Invasive <: AbstractStateTransition
@@ -60,28 +62,30 @@ Rule where a particular location receives rainfall up to a maximum volume of `ma
 mutable struct WaterFlux <: AbstractSetUp
     location::Int64
     prob::DayType
-    maxvol::Unitful.Volume
+    maxvol::VolType
 end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
     loc = rule.location
+    maxvol = rule.maxvol
     area = getgridsize(eco)^2
     bud = eco.abenv.budget.matrix[loc]
     hab = eco.abenv.habitat.h1.matrix[loc]
     rainfall = bud * area
     drainage = rule.prob * timestep * hab
-    hab = max(0.0m^3, hab + rainfall - drainage)
-    runoff = max(0.0m^3,  hab - rule.maxvol)
+    hab = max(zero(typeof(drainage)), hab + rainfall - drainage)
+    runoff = max(zero(typeof(maxvol)),  hab - maxvol)
     hab -= runoff
 end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
     loc = rule.location
+    maxvol = rule.maxvol
     area = getgridsize(eco)^2
     rainfall = eco.abenv.budget.matrix[loc] * area
     drainage = rule.prob * timestep * eco.abenv.habitat.matrix[loc]
     eco.abenv.habitat.matrix[loc] = max(0.0m^3, eco.abenv.habitat.h1.matrix[loc] + rainfall - drainage)
-    runoff = max(0.0m^3, eco.abenv.habitat.matrix[loc] - rule.maxvol)
+    runoff = max(zero(typeof(maxvol)), eco.abenv.habitat.matrix[loc] - maxvol)
     eco.abenv.habitat.matrix[loc] -= runoff
 end
 
@@ -140,7 +144,7 @@ mutable struct Rewet <: AbstractWindDown
     prob::Float64
     length::Unitful.Time
     time::Unitful.Time
-    max::Unitful.Volume
+    max::VolType
 end
 function Rewet(location::Int64, prob::Float64, length::Unitful.Time, max::Unitful.Volume)
     return Rewet(location, prob, length, 1month, max)
@@ -179,7 +183,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, tim
     water_needs = eco.spplist.species.requirement.energy[spp]
     area = getgridsize(eco)^2
     water_use = soil_moisture_frac * water_needs * area * abun
-    hab = max(0.0m^3, hab - water_use) 
+    hab = max(zero(typeof(water_use)), hab - water_use) 
 end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
@@ -189,7 +193,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, tim
     water_needs = eco.spplist.species.requirement.energy[spp]
     area = getgridsize(eco)^2
     water_use = soil_moisture_frac * water_needs * area * eco.abundances.matrix[spp, loc]
-    eco.abenv.habitat.matrix[loc] = max(0.0m^3, eco.abenv.habitat.h1.matrix[loc] - water_use) 
+    eco.abenv.habitat.matrix[loc] = max(zero(typeof(water_use)), eco.abenv.habitat.matrix[loc] - water_use) 
 end
 
 """

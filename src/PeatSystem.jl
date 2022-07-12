@@ -11,10 +11,10 @@ Cache houses an integer array of seed production made by all species in the Ecos
 a matrix of current resource used in the Ecosystem, `totalE`,
 and a Bool to say if these caches are `valid`.
 """
-mutable struct PeatCache <: AbstractCache
+mutable struct PeatCache{V <: Unitful.Volume} <: AbstractCache
   netmigration::Array{Float64, 2}
   seedbank::Array{Int64, 2}
-  watermigration::Array{Unitful.Volume, 2}
+  watermigration::Array{V, 2}
   totalE::Matrix{Float64}
   valid::Bool
 end
@@ -25,7 +25,7 @@ nm = zeros(Float64, size(ml.matrix))
 sb = zeros(Int64, size(ml.matrix))
 wm = zeros(typeof(1.0m^3), _getdimension(abenv.habitat))
 totalE = zeros(Float64, (size(ml.matrix, 2), numrequirements(typeof(sppl.species.requirement))))
-return PeatCache(nm, sb, wm, totalE, false)
+return PeatCache{typeof(1.0m^3)}(nm, sb, wm, totalE, false)
 end
 
 function PeatSystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticEnv,
