@@ -17,4 +17,7 @@ export PeatLookup
 include("PeatSystem.jl")
 export PeatSystem, update_peat_environment!
 
+include("Traits.jl")
+export soiltrait, soilmatch
+
 end

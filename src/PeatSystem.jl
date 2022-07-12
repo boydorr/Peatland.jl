@@ -57,7 +57,7 @@ function PeatSystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticE
   eco.cache.valid = false
 end
 
- function update_peat_environment!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, timestep::Unitful.Time) where {A, B, H <: HabitatCollection2}
+ function update_peat_environment!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
   rng = eco.abundances.rngs[Threads.threadid()]
   eco.abundances.matrix .+= rand.(rng, Poisson.(eco.cache.netmigration))
 

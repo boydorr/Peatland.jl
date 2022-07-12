@@ -56,3 +56,4 @@ plot!(cf, fillcolor = false, linecolor = :black)
 Plots.pdf("../../plots/CorsFochno_elevation.pdf")
 
 geotiff("../../data/CF_elevation.tif", corsFochno_clip)
+geotiff("../../data/CF_elevation_full.tif", corsFochno)

@@ -9,6 +9,10 @@ AbstractAbiotic, _run_rule!, getspecies, getlocation, getprob, TimeType, Lookup,
 _symmetric_grid, move!, get_neighbours, convert_coords
 const WaterTimeType = typeof(1.0m^3/day)
 
+"""
+    Invasive <: AbstractStateTransition
+Rule where an invasive species is added at a location with probability `prob`.
+"""
 mutable struct Invasive <: AbstractStateTransition
     species::Int64
     location::Int64
@@ -30,6 +34,10 @@ function _run_rule!(eco::Ecosystem, rule::Invasive, timestep::Unitful.Time)
     eco.abundances.matrix[spp, loc] += gains
 end
 
+"""
+    WindDispersal <: AbstractPlaceTransition
+Rule where a species is wind dispersed with an updating WALD kernel.
+"""
 mutable struct WindDispersal <: AbstractPlaceTransition
     species::Int64
     location::Int64
@@ -43,13 +51,44 @@ end
 function _wald(r, λ, μ)
     d = ((r[3]-r[1])^2+(r[4]-r[2])^2)
     return (λ/(2*π*d^3))^0.5 * exp(-(λ*(d-μ)^2)/(2*μ^2*d))
-   end
+end
 
+"""
+    WaterFlux <: AbstractSetUp
+Rule where a particular location receives rainfall up to a maximum volume of `maxvol` and drains at a probability `prob`.
+"""
 mutable struct WaterFlux <: AbstractSetUp
     location::Int64
     prob::DayType
+    maxvol::Unitful.Volume
 end
 
+function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
+    loc = rule.location
+    area = getgridsize(eco)^2
+    bud = eco.abenv.budget.matrix[loc]
+    hab = eco.abenv.habitat.h1.matrix[loc]
+    rainfall = bud * area
+    drainage = rule.prob * timestep * hab
+    hab = max(0.0m^3, hab + rainfall - drainage)
+    runoff = max(0.0m^3,  hab - rule.maxvol)
+    hab -= runoff
+end
+
+function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
+    loc = rule.location
+    area = getgridsize(eco)^2
+    rainfall = eco.abenv.budget.matrix[loc] * area
+    drainage = rule.prob * timestep * eco.abenv.habitat.matrix[loc]
+    eco.abenv.habitat.matrix[loc] = max(0.0m^3, eco.abenv.habitat.h1.matrix[loc] + rainfall - drainage)
+    runoff = max(0.0m^3, eco.abenv.habitat.matrix[loc] - rule.maxvol)
+    eco.abenv.habitat.matrix[loc] -= runoff
+end
+
+"""
+    Dry <: AbstractWindDown
+Rule where a particular location dries out over a set length of time.
+"""
 mutable struct Dry <: AbstractWindDown
     location::Int64
     prob::Float64
@@ -74,6 +113,28 @@ function getlocation(rule::R) where R <:AbstractWindDown
     return rule.location
 end
 
+function changerate!(rule::Dry, newrate::DayType)
+    return rule.prob = newrate
+end
+
+function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Dry, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
+    loc = rule.location
+    drying = min(1, rule.time / rule.length) * rule.prob * eco.abenv.habitat.h1.matrix[loc]
+    eco.abenv.habitat.h1.matrix[loc] -= drying
+    rule.time += timestep
+end
+
+function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Dry, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
+    loc = rule.location
+    drying = min(1, rule.time / rule.length) * rule.prob * eco.abenv.habitat.matrix[loc]
+    eco.abenv.habitat.matrix[loc] -= drying
+    rule.time += timestep
+end
+
+"""
+    Rewet <: AbstractWindDown
+Rule where a particular location is rewet over a set length of time.
+"""
 mutable struct Rewet <: AbstractWindDown
     location::Int64
     prob::Float64
@@ -85,12 +146,56 @@ function Rewet(location::Int64, prob::Float64, length::Unitful.Time, max::Unitfu
     return Rewet(location, prob, length, 1month, max)
 end
 
+function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Rewet, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
+    loc = rule.location
+    rewet = min(1, rule.time / rule.length) * rule.prob * (rule.max - eco.abenv.habitat.h1.matrix[loc])
+    eco.abenv.habitat.h1.matrix[loc] += rewet
+    rule.time += timestep
+end
+
+function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Rewet, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
+    loc = rule.location
+    rewet = min(1, rule.time / rule.length) * rule.prob * (rule.max - eco.abenv.habitat.matrix[loc])
+    eco.abenv.habitat.matrix[loc] += rewet
+    rule.time += timestep
+end
+
+"""
+    WaterUse <: AbstractStateTransition
+Rule where a species at a location uses up the available soil moisture, given by `soil_moisture_frac`, according to its water use need.
+"""
 mutable struct WaterUse <: AbstractStateTransition
     species::Int64
     location::Int64
     soil_moisture_frac::Float64
 end
 
+function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
+    spp = rule.species
+    loc = rule.location
+    soil_moisture_frac = rule.soil_moisture_frac
+    hab = eco.abenv.habitat.h1.matrix[loc]
+    abun = eco.abundances.matrix[spp, loc]
+    water_needs = eco.spplist.species.requirement.energy[spp]
+    area = getgridsize(eco)^2
+    water_use = soil_moisture_frac * water_needs * area * abun
+    hab = max(0.0m^3, hab - water_use) 
+end
+
+function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
+    spp = rule.species
+    loc = rule.location
+    soil_moisture_frac = rule.soil_moisture_frac
+    water_needs = eco.spplist.species.requirement.energy[spp]
+    area = getgridsize(eco)^2
+    water_use = soil_moisture_frac * water_needs * area * eco.abundances.matrix[spp, loc]
+    eco.abenv.habitat.matrix[loc] = max(0.0m^3, eco.abenv.habitat.h1.matrix[loc] - water_use) 
+end
+
+"""
+    LateralFlow <: AbstractWindDown
+Rule where water flows from a grid square to its neighbours depending on the elevation and length of shared boundaries.
+"""
 mutable struct LateralFlow <: AbstractWindDown
     location::Int64
     neighbours::Matrix{Int64}
@@ -98,7 +203,8 @@ mutable struct LateralFlow <: AbstractWindDown
     elevation::Vector{Float64}
     prob::DayType
 end
-function LateralFlow(abenv::GridAbioticEnv, ele::ContinuousHab, location::Int64, rate::DayType)
+
+function LateralFlow(abenv::GridAbioticEnv, ele::ContinuousHab, location::Int64, rate::typeof(1.0/month))
     width = size(abenv.habitat, 1)
     x, y = convert_coords(location, width)
     neighbours = get_neighbours(abenv.habitat.h1.matrix, x, y, 8)
@@ -107,7 +213,7 @@ function LateralFlow(abenv::GridAbioticEnv, ele::ContinuousHab, location::Int64,
     return LateralFlow(location, neighbours, boundary_length, elevation_diff, rate)
 end
 
-function LateralFlow(abenv::GridAbioticEnv, location::Int64, rate::DayType)
+function LateralFlow(abenv::GridAbioticEnv, location::Int64, rate::typeof(1.0/month))
     width = size(abenv.habitat, 1)
     x, y = convert_coords(location, width)
     neighbours = get_neighbours(abenv.habitat.matrix, x, y, 8)
@@ -116,7 +222,7 @@ function LateralFlow(abenv::GridAbioticEnv, location::Int64, rate::DayType)
     return LateralFlow(location, neighbours, boundary_length, elevation_diff, rate)
 end
 
-function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, timestep::Unitful.Time) where {A, B, H <: HabitatCollection2}
+function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
     loc = rule.location
     neighbours = rule.neighbours
     boundaries = rule.boundaries
@@ -140,69 +246,4 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, 
         eco.cache.watermigration[loc] -= drainage
         eco.cache.watermigration[nei_loc] += drainage
     end
-end
-
-function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, timestep::Unitful.Time) where {A, B, H <: HabitatCollection2}
-    spp = rule.species
-    loc = rule.location
-    soil_moisture_frac = rule.soil_moisture_frac
-    water_use = eco.spplist.species.requirement.energy[spp]
-    area = getgridsize(eco)^2
-    eco.abenv.habitat.h1.matrix[loc] -= (soil_moisture_frac * water_use * area * eco.abundances.matrix[spp, loc])
-end
-
-function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
-    spp = rule.species
-    loc = rule.location
-    soil_moisture_frac = rule.soil_moisture_frac
-    water_use = eco.spplist.species.requirement.energy[spp]
-    area = getgridsize(eco)^2
-    eco.abenv.habitat.matrix[loc] -= (soil_moisture_frac * water_use * area * eco.abundances.matrix[spp, loc])
-end
-
-function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: HabitatCollection2}
-    loc = rule.location
-    area = getgridsize(eco)^2
-    rainfall = eco.abenv.budget.matrix[loc] * area
-    drainage = rule.prob * timestep * eco.abenv.habitat.h1.matrix[loc]
-    eco.abenv.habitat.h1.matrix[loc] += rainfall - drainage
-end
-function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
-    loc = rule.location
-    area = getgridsize(eco)^2
-    rainfall = eco.abenv.budget.matrix[loc] * area
-    drainage = rule.prob * timestep * eco.abenv.habitat.matrix[loc]
-    eco.abenv.habitat.matrix[loc] += rainfall - drainage
-end
-
-function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Dry, timestep::Unitful.Time) where {A, B, H <: HabitatCollection2}
-    loc = rule.location
-    drying = min(1, rule.time / rule.length) * rule.prob * eco.abenv.habitat.h1.matrix[loc]
-    eco.abenv.habitat.h1.matrix[loc] -= drying
-    rule.time += timestep
-end
-
-function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Dry, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
-    loc = rule.location
-    drying = min(1, rule.time / rule.length) * rule.prob * eco.abenv.habitat.matrix[loc]
-    eco.abenv.habitat.matrix[loc] -= drying
-    rule.time += timestep
-end
-
-function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Rewet, timestep::Unitful.Time) where {A, B, H <: HabitatCollection2}
-    loc = rule.location
-    rewet = min(1, rule.time / rule.length) * rule.prob * (rule.max - eco.abenv.habitat.h1.matrix[loc])
-    eco.abenv.habitat.h1.matrix[loc] += rewet
-    rule.time += timestep
-end
-
-function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Rewet, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
-    loc = rule.location
-    rewet = min(1, rule.time / rule.length) * rule.prob * (rule.max - eco.abenv.habitat.matrix[loc])
-    eco.abenv.habitat.matrix[loc] += rewet
-    rule.time += timestep
-end
-
-function changerate!(rule::Dry, newrate::DayType)
-    return rule.prob = newrate
 end

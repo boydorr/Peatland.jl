@@ -27,6 +27,11 @@ function elevation_habitat(ele::AxisArray, size::Unitful.Length)
   return ContinuousHab(ele.data, size, habitatupdate)
 end
 
+function soil_habitat(soil::Array{Int, 2}, size::Unitful.Length)
+  habitatupdate = HabitatUpdate(NoChange, 0.0/month)
+  return DiscreteHab(soil, size, habitatupdate)
+end
+
 """
      peatlandAE(val::Union{Float64, Unitful.Quantity{Float64}},
          dimension::Tuple{Int64, Int64}, maxbud::Float64, area::Unitful.Area{Float64},
@@ -59,6 +64,21 @@ function _habitat_builder(ele::AxisArray, val::Union{Float64, Unitful.Quantity{F
   hab2 = elevation_habitat(ele, gridsquaresize)
 
   return HabitatCollection2(hab1, hab2)
+end
+
+function _habitat_builder(ele::AxisArray, soil::Array{Int64}, val::Union{Float64, Unitful.Quantity{Float64}})
+  if typeof(val) <: Unitful.Area
+    val = uconvert(m^3, val)
+  end
+  dimension = size(ele)
+  area = uconvert(km^2, step(ele.axes[1]) * step(ele.axes[2]) * prod(dimension))
+  gridsquaresize = sqrt(area / (dimension[1] * dimension[2]))
+
+  hab1 = peatland_habitat(val, gridsquaresize, dimension)
+  hab2 = elevation_habitat(ele, gridsquaresize)
+  hab3 = soil_habitat(soil, gridsquaresize)
+
+  return HabitatCollection3(hab1, hab2, hab3)
 end
 
 function _budget_builder(dimension::Tuple{Int64, Int64}, maxbud::Unitful.Quantity{Float64}, area::Unitful.Area{Float64})
@@ -125,4 +145,15 @@ function peatlandAE(ele::AxisArray, val::Union{Float64, Unitful.Quantity{Float64
   return peatlandAE(hab, active, bud)
 end
 
+function peatlandAE(ele::AxisArray, soil::Array{Int64, 2}, val::Union{Float64, Unitful.Quantity{Float64}}, 
+  bud::B) where B <: AbstractBudget
+  active = Array(.!isnan.(Array(ele)))
+  hab = _habitat_builder(ele, soil, val)
+  return peatlandAE(hab, active, bud)
+end
 
+function peatlandAE(ele::AxisArray, soil::Array{Int64, 2}, val::Union{Float64, Unitful.Quantity{Float64}}, 
+  bud::B, active::Array{Bool, 2}) where B <: AbstractBudget
+  hab = _habitat_builder(ele, soil, val)
+  return peatlandAE(hab, active, bud)
+end

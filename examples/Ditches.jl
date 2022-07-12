@@ -9,15 +9,17 @@ using JLD2
 using DataFrames
 using Missings
 using CSV
+using Distances
+using Shapefile
 
 JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
 
 file = "data/CF_elevation.tif"
-cf = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
+cf = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
 active = Array(.!isnan.(Array(cf)))
-heatmap(active)
+heatmap(active')
 
-grid = size(cf); individuals=5_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid); totalK = 0.01mm/m^2
+grid = size(cf); individuals=10_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
 numMoss = 5; numShrub = 28; numSpecies = numMoss + numShrub
 
 mosses = 1:numMoss
@@ -48,68 +50,122 @@ kernel = fill(GaussianKernel(100.0m, 1e-3), numSpecies)
 movement = BirthOnlyMovement(kernel, NoBoundary())
 
 # Create species list, including their temperature preferences, seed abundance and native status
-pref1 = rand(Normal(100.0, 0.1), numMoss) .* m^3 
-pref2 = rand(Normal(50.0, 0.1), numShrub) .* m^3 
+pref1 = rand(Normal(70.0, 0.1), numMoss) .* m^3 
+pref2 = rand(Normal(30.0, 0.1), numShrub) .* m^3 
 opts = [pref1; pref2]
-vars = fill(5.0m^3, numSpecies)
+vars = [fill(5.0m^3, numMoss); fill(10.0m^3, numShrub)]
 water_traits = GaussTrait(opts, vars)
 ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
-traits = TraitCollection2(water_traits, ele_traits)
+soil_pref1 = fill([1], numMoss); soil_pref2 = fill([0,1], numShrub)
+soil_pref = soiltrait([soil_pref1; soil_pref2])
+traits = TraitCollection3(water_traits, ele_traits, soil_pref)
 native = fill(true, numSpecies)
 # abun = rand(Multinomial(individuals, numSpecies))
-abun = fill(div(individuals, numSpecies), numSpecies)
+abun = [fill(div(individuals, numMoss), numMoss); fill(0, numShrub)]
 sppl = SpeciesList(numSpecies, traits, abun, energy_vec,
     movement, param, native)
 
 # Create abiotic environment - even grid of one temperature
-abenv = peatlandAE(cf, 100.0m^3, totalK) 
+file = "data/CF_elevation_full.tif"
+ele = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
+ele.data[ele.data .< 0] .= 0
+
+@load "data/RainfallBudget.jld2"
+soil = Int64.(active)
+abenv = peatlandAE(ele, soil, 100.0m^3, bud) 
+abenv.habitat.h1.matrix ./= abenv.habitat.h2.matrix
+centre_point = (180, 270)
+dists = [euclidean(centre_point, i) for i in Tuple.(findall(active))[:]]
+active_squares = findall(active)
+for i in eachindex(active_squares)
+    abenv.habitat.h1.matrix[active_squares[i]] += 3 .* exp.(-1 .* dists[i]/70) * abenv.habitat.h1.matrix[active_squares[i]]
+end 
+abenv.habitat.h1.matrix[isinf.(abenv.habitat.h1.matrix)] .= 100.0m^3
+abenv.habitat.h1.matrix[isnan.(abenv.habitat.h1.matrix)] .= 0.0m^3
+heatmap(ustrip.(abenv.habitat.h1.matrix)', clim = (0, 100))
 
 # Set relationship between species and environment (gaussian)
-rel = additiveTR2(Gauss{typeof(1.0m^3)}(), Gauss{Float64}())
+rel = multiplicativeTR3(Gauss{typeof(1.0m^3)}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
 
 # Create new transition list
 transitions = create_transition_list()
 addtransition!(transitions, UpdateEnergy(update_energy_usage!))
 addtransition!(transitions, UpdateEnvironment(update_peat_environment!))
 active_squares = findall(active[1:end])
-for loc in active_squares
+peat_squares = findall(soil .== 1)
+for loc in eachindex(abenv.habitat.h1.matrix)
     for spp in eachindex(sppl.species.names) 
         addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
         addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
-        addtransition!(transitions, SeedDisperse(spp, loc))#, mean(plant_height), 0.3, plant_height[spp], 1.0m/s, 1.0m/s))
+        addtransition!(transitions, SeedDisperse(spp, loc))
         addtransition!(transitions, WaterUse(spp, loc, 0.01))
         if spp > numMoss
             addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
         end
     end
-    addtransition!(transitions, LateralFlow(abenv, loc))
-    addtransition!(transitions, WaterFlux(loc, 0.625/month))
+    if loc ∈ peat_squares
+        drainage = 0.00001/month; flow = 0.0001/month
+    else
+        drainage = 0.006/month; flow = 0.5/month
+    end
+    addtransition!(transitions, LateralFlow(abenv, abenv.habitat.h2, loc, flow))
+    addtransition!(transitions, WaterFlux(loc, drainage, 150.0m^3))
 end
+
 # Add ditch drainage
-file = "data/Ditches.tif"
-ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
-ditch_locations = findall(.!isnan.(ditches))
-for d in ditch_locations
-    loc = convert_coords(d[2], d[1], size(cf, 1))
-    addtransition!(transitions, Dry(loc, 1.0, 1month))
-end
+# file = "data/Ditches.tif"
+# ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
+# ditch_locations = findall(.!isnan.(ditches))
+# for d in ditch_locations
+#     loc = convert_coords(d[2], d[1], size(cf, 1))
+#     addtransition!(transitions, Dry(loc, 1.0, 1month))
+# end
 # Create ecosystem
-eco = Ecosystem(sppl, abenv, rel, transitions = transitions, peatcache = true)
+eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
+
+# envs = zeros(lensim)
+# for i in 1:lensim
+#     EcoSISTEM.update!(eco, timestep, transitions)
+#     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
+# end
+# plot(envs)
+
+hab = ustrip.(eco.abenv.habitat.h1.matrix)
+#hab[.!active] .= NaN
+heatmap(hab', clim = (0, 100))
+# Plots.pdf("plots/Water.pdf")
+
+# hab = ustrip.(eco.abenv.habitat.h2.matrix)
+# hab[.!active] .= NaN
+# heatmap(hab)
+# Plots.pdf("plots/Ele.pdf")
 
 # Run simulation
 # Simulation Parameters
-burnin = 10year; times1 = 5year; times2 = 5year; timestep = 1month;
-record_interval = 1month; repeats = 1
+burnin = 10year; times = 5year; timestep = 1year;
+record_interval = 1year
 lensim = length(0years:record_interval:burnin)
-lensim1 = length(0years:record_interval:times1)
-lensim2 = length(0years:record_interval:times2)
-abuns1 = generate_storage(eco, lensim1, 1)[:, :, :, 1]
-abuns2 = generate_storage(eco, lensim2, 1)[:, :, :, 1]
-#abuns3 = generate_storage(eco, lensim2, 1)[:, :, :, 1]
 # Burnin
 abuns = generate_storage(eco, lensim, 1)[:, :, :, 1]
+@time simulate!(eco, timestep, timestep)
 @time simulate_record!(abuns, eco, burnin, record_interval, timestep)
 
-sumabuns = Float64.(reshape(sum(abuns[:, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap(sumabuns')
+plot(sum(abuns[1:numMoss, :, :, :, 1], dims = (1,2))[1, 1, :], grid = false, label = "",
+layout = (2, 1), title = "Moss")
+plot!(sum(abuns[numMoss+1:end, :, :, :, 1], dims = (1,2))[1, 1, :], label = "",
+subplot = 2, color = 2, grid = false, title = "Shrub")
+
+Moss = reshape(sum(abuns[1:numMoss, :, :, 1], dims = 1)[1, :, :], 400, 500, 11)
+Shrub = reshape(sum(abuns[numMoss+1:end, :, :, 1], dims = 1)[1, :, :], 400, 500, 11)
+heatmap(Moss[:, :, 11]')
+heatmap(Shrub[:, :, 11]')
+
+cf_outline = Shapefile.shapes(Shapefile.Table("data/CorsFochno.shp"))
+ys = ustrip.(cf.axes[1].val); xs = ustrip.(cf.axes[2].val)
+heatmap(ys, xs, Shrub[:, :, end]', layout = (@layout [a b]), size = (1000, 400))
+plot!(cf_outline, fillcolor = false, linecolor = :white, subplot = 1)
+heatmap!(ys, xs, Moss[:, :, end]', subplot =2)
+plot!(cf_outline, fillcolor = false, linecolor = :white, subplot =2)
