@@ -4,7 +4,7 @@ using SparseArrays
 using Random
 
 import EcoSISTEM: AbstractLookup, getdimension, convert_coords, getlookup, calc_lookup_moves!,
-move!, getboundary, calc_lookup_moves!
+move!, getboundary, calc_lookup_moves!, _lookup, genlookups, _gaussian_disperse, _getgridsize, _getdimension, _getlookup
 
 
 mutable struct PeatLookup <: AbstractLookup
@@ -104,14 +104,16 @@ function move!(eco::AbstractEcosystem, ::BirthOnlyMovement, i::Int64, sp::Int64,
   width, height = getdimension(eco)
   (x, y) = convert_coords(eco, i, width)
    lookup = getlookup(eco, sp)
-  calc_lookup_moves!(getboundary(eco.spplist.species.movement), x, y, sp, eco, births)
-  # Map moves to location in grid
-  mov = lookup.moves
-  for i in eachindex(lookup.x)
-      newx = mod(lookup.x[i] + x - 1, width) + 1
-      newy = mod(lookup.y[i] + y - 1, height) + 1
-      loc = convert_coords(eco, (newx, newy), width)
-      grd[sp, loc] += mov[i]
-  end
+   lock(eco.cache.lock) do
+        calc_lookup_moves!(getboundary(eco.spplist.species.movement), x, y, sp, eco, births)
+        # Map moves to location in grid
+        mov = lookup.moves
+        for i in eachindex(lookup.x)
+            newx = mod(lookup.x[i] + x - 1, width) + 1
+            newy = mod(lookup.y[i] + y - 1, height) + 1
+            loc = convert_coords(eco, (newx, newy), width)
+            grd[sp, loc] += mov[i]
+        end
+   end
   return eco
 end
