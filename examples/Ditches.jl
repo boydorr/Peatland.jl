@@ -13,14 +13,15 @@ using Distances
 using Shapefile
 
 JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
+JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
 
 file = "data/CF_elevation.tif"
 cf = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
 active = Array(.!isnan.(Array(cf)))
-heatmap(active')
+heatmap(active)
 
-grid = size(cf); individuals=10_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
-numMoss = 5; numShrub = 28; numSpecies = numMoss + numShrub
+grid = size(cf); individuals=1_000_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
+numMoss = nrow(moss_spp); numShrub = nrow(peat_spp); numSpecies = numMoss + numShrub
 
 mosses = 1:numMoss
 shrubs = findall((peat_spp[!, :Type] .== "Shrub") .| (peat_spp[!, :Type] .== "Grass") .| (peat_spp[!, :Type] .== "Herb")) .+ numMoss
@@ -28,11 +29,11 @@ trees = findall((peat_spp[!, :Type] .== "Tree")) .+ numMoss
 
 height = peat_spp[!, :Plant_height]
 shrub_size = height .* 1.0m^2
-moss_height = fill(1.0, numMoss)
-moss_size = moss_height .* 1.0m^2
-plant_height = [moss_height; height] .* m
+moss_height = moss_spp[!, :Len] .* mm
+moss_size = uconvert.(m^2, moss_height .* 0.1m)
+
 #Set up how much energy each species consumes
-req1 = moss_size .* rand(Normal(1.0, 0.01), numMoss) .* mm ./m^2
+req1 = moss_size .* rand(Normal(10.0, 0.1), numMoss) .* mm ./m^2
 req2 = shrub_size .* rand(Normal(10.0, 0.1), numShrub) .* mm ./m^2
 energy_vec = WaterRequirement([req1; req2])
 
@@ -50,10 +51,10 @@ kernel = fill(GaussianKernel(100.0m, 1e-3), numSpecies)
 movement = BirthOnlyMovement(kernel, NoBoundary())
 
 # Create species list, including their temperature preferences, seed abundance and native status
-pref1 = rand(Normal(70.0, 0.1), numMoss) .* m^3 
-pref2 = rand(Normal(30.0, 0.1), numShrub) .* m^3 
+pref1 = rand(Normal(100.0, 0.1), numMoss) .* m^3 
+pref2 = rand(Normal(50.0, 0.1), numShrub) .* m^3 
 opts = [pref1; pref2]
-vars = [fill(5.0m^3, numMoss); fill(10.0m^3, numShrub)]
+vars = [fill(5.0m^3, numMoss); fill(20.0m^3, numShrub)]
 water_traits = GaussTrait(opts, vars)
 ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
 soil_pref1 = fill([1], numMoss); soil_pref2 = fill([0,1], numShrub)
@@ -70,18 +71,15 @@ file = "data/CF_elevation_full.tif"
 ele = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
 ele.data[ele.data .< 0] .= 0
 
+file = "data/CF_TPI_corrected.tif"
+tpi = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
+tpi.data[tpi.data .< 0] .= 0
+
 @load "data/RainfallBudget.jld2"
 soil = Int64.(active)
-abenv = peatlandAE(ele, soil, 100.0m^3, bud) 
-abenv.habitat.h1.matrix ./= abenv.habitat.h2.matrix
-centre_point = (180, 270)
-dists = [euclidean(centre_point, i) for i in Tuple.(findall(active))[:]]
-active_squares = findall(active)
-for i in eachindex(active_squares)
-    abenv.habitat.h1.matrix[active_squares[i]] += 3 .* exp.(-1 .* dists[i]/70) * abenv.habitat.h1.matrix[active_squares[i]]
-end 
-abenv.habitat.h1.matrix[isinf.(abenv.habitat.h1.matrix)] .= 100.0m^3
-abenv.habitat.h1.matrix[isnan.(abenv.habitat.h1.matrix)] .= 0.0m^3
+abenv = peatlandAE(ele, soil, 10.0m^3, bud) 
+abenv.habitat.h1.matrix .*= tpi.data
+abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 10.0m^3] .= 10.0m^3
 heatmap(ustrip.(abenv.habitat.h1.matrix)', clim = (0, 100))
 
 # Set relationship between species and environment (gaussian)
@@ -93,8 +91,9 @@ addtransition!(transitions, UpdateEnergy(update_energy_usage!))
 addtransition!(transitions, UpdateEnvironment(update_peat_environment!))
 active_squares = findall(active[1:end])
 peat_squares = findall(soil .== 1)
-for loc in eachindex(abenv.habitat.h1.matrix)
-    for spp in eachindex(sppl.species.names) 
+# Add in species based transitions
+for spp in eachindex(sppl.species.names) 
+    for loc in active_squares
         addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
         addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
         addtransition!(transitions, SeedDisperse(spp, loc))
@@ -103,6 +102,9 @@ for loc in eachindex(abenv.habitat.h1.matrix)
             addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
         end
     end
+end
+# Add in location based transitions
+for loc in eachindex(abenv.habitat.h1.matrix)
     if loc ∈ peat_squares
         drainage = 0.00001/month; flow = 0.0001/month
     else
@@ -142,26 +144,30 @@ heatmap(hab', clim = (0, 100))
 
 # Run simulation
 # Simulation Parameters
-burnin = 10year; times = 5year; timestep = 1year;
-record_interval = 1year
+burnin = 5year; times = 10year; timestep = 1month;
+record_interval = 1month
 lensim = length(0years:record_interval:burnin)
 # Burnin
 abuns = generate_storage(eco, lensim, 1)[:, :, :, 1]
-@time simulate!(eco, timestep, timestep)
-@time simulate_record!(abuns, eco, burnin, record_interval, timestep)
+@time simulate!(eco, burnin, timestep)
+@time simulate_record!(abuns, eco, burnin, record_interval, timestep, save = false)
 
-sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+JLD2.save("data/CF_abuns.jld2", "abuns", abuns)
+JLD2.@load "data/CF_abuns.jld2"
+
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix')))
+sumabuns[.!active'] .= NaN
+heatmap(sumabuns)
+
+sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap(sumabuns')
+
 plot(sum(abuns[1:numMoss, :, :, :, 1], dims = (1,2))[1, 1, :], grid = false, label = "",
 layout = (2, 1), title = "Moss")
 plot!(sum(abuns[numMoss+1:end, :, :, :, 1], dims = (1,2))[1, 1, :], label = "",
 subplot = 2, color = 2, grid = false, title = "Shrub")
 
-Moss = reshape(sum(abuns[1:numMoss, :, :, 1], dims = 1)[1, :, :], 400, 500, 11)
-Shrub = reshape(sum(abuns[numMoss+1:end, :, :, 1], dims = 1)[1, :, :], 400, 500, 11)
-heatmap(Moss[:, :, 11]')
-heatmap(Shrub[:, :, 11]')
 
 cf_outline = Shapefile.shapes(Shapefile.Table("data/CorsFochno.shp"))
 ys = ustrip.(cf.axes[1].val); xs = ustrip.(cf.axes[2].val)
