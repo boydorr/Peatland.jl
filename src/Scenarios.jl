@@ -11,11 +11,16 @@ const WaterTimeType = typeof(1.0m^3/day)
 const VolType = typeof(1.0m^3)
 const LengthType = typeof(1.0m)
 
+abstract type AbstractPeatState <: AbstractStateTransition end
+abstract type AbstractPeatPlace <: AbstractPlaceTransition end
+abstract type AbstractPeatSetUp <: AbstractSetUp end
+abstract type AbstractPeatWindDown <: AbstractWindDown end
+
 """
     Invasive <: AbstractStateTransition
 Rule where an invasive species is added at a location with probability `prob`.
 """
-mutable struct Invasive <: AbstractStateTransition
+mutable struct Invasive <: AbstractPeatState
     species::Int64
     location::Int64
     prob::DayType
@@ -40,12 +45,12 @@ end
     WindDispersal <: AbstractPlaceTransition
 Rule where a species is wind dispersed with an updating WALD kernel.
 """
-mutable struct WindDispersal <: AbstractPlaceTransition
+mutable struct WindDispersal <: AbstractPeatPlace
     species::Int64
     location::Int64
-    canopyheight::Unitful.Length
+    canopyheight::LengthType
     scaling::Float64
-    plantheight::Unitful.Length
+    plantheight::LengthType
     windspeed::Unitful.Velocity
     terminalvelocity::Unitful.Velocity
 end
@@ -59,7 +64,7 @@ end
     WaterFlux <: AbstractSetUp
 Rule where a particular location receives rainfall up to a maximum volume of `maxvol` and drains at a probability `prob`.
 """
-mutable struct WaterFlux <: AbstractSetUp
+mutable struct WaterFlux <: AbstractPeatSetUp
     location::Int64
     prob::DayType
     maxvol::VolType
@@ -93,7 +98,7 @@ end
     Dry <: AbstractWindDown
 Rule where a particular location dries out over a set length of time.
 """
-mutable struct Dry <: AbstractWindDown
+mutable struct Dry <: AbstractPeatWindDown
     location::Int64
     prob::Float64
     length::Unitful.Time
@@ -139,7 +144,7 @@ end
     Rewet <: AbstractWindDown
 Rule where a particular location is rewet over a set length of time.
 """
-mutable struct Rewet <: AbstractWindDown
+mutable struct Rewet <: AbstractPeatWindDown
     location::Int64
     prob::Float64
     length::Unitful.Time
@@ -168,7 +173,7 @@ end
     WaterUse <: AbstractStateTransition
 Rule where a species at a location uses up the available soil moisture, given by `soil_moisture_frac`, according to its water use need.
 """
-mutable struct WaterUse <: AbstractStateTransition
+mutable struct WaterUse <: AbstractPeatState
     species::Int64
     location::Int64
     soil_moisture_frac::Float64
@@ -200,7 +205,7 @@ end
     LateralFlow <: AbstractWindDown
 Rule where water flows from a grid square to its neighbours depending on the elevation and length of shared boundaries.
 """
-mutable struct LateralFlow <: AbstractWindDown
+mutable struct LateralFlow <: AbstractPeatWindDown
     location::Int64
     neighbours::Matrix{Int64}
     boundaries::Vector{Float64}

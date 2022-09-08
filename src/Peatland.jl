@@ -21,5 +21,6 @@ include("Traits.jl")
 export soiltrait, soilmatch
 
 include("Run.jl")
+export run_rule!
 
 end
