@@ -41,7 +41,7 @@ function PeatSystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticE
     lookup = SpeciesLookup(collect(map(k -> EcoSISTEM.genlookups(abenv.habitat, k), getkernels(spplist.species.movement))))
    end
 
-   return Ecosystem{typeof(ml), typeof(abenv), typeof(spplist), typeof(rel), typeof(lookup), typeof(cache)}(ml, spplist, abenv,
+   return Ecosystem{typeof(ml), typeof(abenv), typeof(spplist), typeof(rel), typeof(lookup), typeof(cache), typeof(transitions)}(ml, spplist, abenv,
    missing, rel, lookup, cache, transitions)
  end
 
