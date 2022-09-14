@@ -354,7 +354,7 @@ version = "0.1.6"
 
 [[EcoSISTEM]]
 deps = ["ArchGDAL", "AxisArrays", "Calculus", "Conda", "DataFrames", "DataPipeline", "Dates", "Distributions", "Diversity", "EcoBase", "Feather", "HCubature", "HDF5", "HTTP", "IndexedTables", "InteractiveUtils", "Interpolations", "JLD2", "JLSO", "LibGit2", "Libdl", "LinearAlgebra", "Logging", "Markdown", "Measures", "Missings", "NetCDF", "ORCA", "OnlineStats", "OnlineStatsBase", "Phylo", "Pkg", "Printf", "REPL", "Random", "RecipesBase", "Requires", "Revise", "SHA", "SQLite", "SimpleSDMLayers", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "Unitful"]
-git-tree-sha1 = "7ffe92e8e3ee4711c8ba689f3be76c59be3d0380"
+git-tree-sha1 = "9af992e6bfb3ec5a1ac33c1468d6327601f668f3"
 repo-rev = "claireh93/generated-functions"
 repo-url = "https://github.com/EcoJulia/EcoSISTEM.jl.git"
 uuid = "ed2dc23b-ada4-5fdb-a26f-56368a14ad8f"
