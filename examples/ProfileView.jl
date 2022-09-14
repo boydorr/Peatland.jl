@@ -91,7 +91,7 @@ function proftest(n::Int64)
     rel = multiplicativeTR3(Gauss{typeof(1.0m^3)}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
 
     # Create new transition list
-    transitions = create_transition_list()
+    transitions = TransitionList()
     addtransition!(transitions, UpdateEnergy(update_energy_usage!))
     addtransition!(transitions, UpdateEnvironment(update_peat_environment!))
     active_squares = findall(active[1:end])

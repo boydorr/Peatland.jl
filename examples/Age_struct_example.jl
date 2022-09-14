@@ -48,7 +48,7 @@ identities = (young = cat_idx[1, :], mature = cat_idx[2, :])
 
 sppl.params.death[identities.young] *= 2
 # Create new transition list
-transitions = create_transition_list()
+transitions = TransitionList()
 addtransition!(transitions, UpdateEnergy(update_energy_usage!))
 addtransition!(transitions, UpdateEnvironment(update_environment!))
 for loc in eachindex(abenv.habitat.matrix)

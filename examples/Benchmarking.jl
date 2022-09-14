@@ -91,7 +91,7 @@ abenv = peatlandAE(ele, soil, 100.0m^3, bud)
 rel = multiplicativeTR3(Gauss{typeof(1.0m^3)}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
 
 # Create new transition list
-transitions = create_transition_list()
+transitions = TransitionList()
 addtransition!(transitions, UpdateEnergy(update_energy_usage!))
 addtransition!(transitions, UpdateEnvironment(update_peat_environment!))
 active_squares = findall(active[1:end])
@@ -100,7 +100,7 @@ for loc in eachindex(abenv.habitat.h1.matrix)
     for spp in eachindex(sppl.species.names) 
         addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
         addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
-        addtransition!(transitions, SeedDisperse(spp, loc))
+        addtransition!(transitions, GaussDispersal(spp, loc))
         addtransition!(transitions, WaterUse(spp, loc, 0.01))
         if spp > numMoss
             addtransition!(transitions, Invasive(spp, loc, 10.0/28days))

@@ -15,8 +15,8 @@ gdf = groupby(rainfall, [:year, :month])
 monthly_rain = combine(gdf, "AWS CF" => (x -> sum(skipmissing(x))) => :sum)
 plot(monthly_rain[!, :sum])
 
-file = "data/CorsFochno.tif"
-cf = readfile(file, 261659.3m, 265409.3m, 289536.7m, 292756.7m)
+file = "data/CF_outline.tif"
+cf = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
 grid = size(cf)
 prec_array = fill(0.0mm, grid[1], grid[2], nrow(monthly_rain))
 for i in 1:nrow(monthly_rain)

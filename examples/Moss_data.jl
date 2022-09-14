@@ -26,9 +26,11 @@ cf_spp = cf_bryo[!, :Species_Name]
 moss_spp = filter(row -> row.Taxon_name ∈ cf_spp, moss_spp)
 JLD2.save("data/Peat_30_moss.jld2", "moss_spp", moss_spp)
 
+peat_spp = CSV.File("data/Peatland30spp.csv", normalizenames=true)
+peat_spp = DataFrame(peat_spp)
 plant_spp = CSV.File("data/PLANTATT_19_Nov_08.csv", normalizenames=true)
 plant_spp = DataFrame(plant_spp)
 plant_spp = filter(x -> !ismissing(x.Taxon_name), plant_spp)
 plant_spp = filter(x -> x.Taxon_name ∈ peat_spp.Species, plant_spp)
 
-
+plant_spp.Br_Habitats

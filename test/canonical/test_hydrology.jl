@@ -51,7 +51,7 @@ using Test
     rel = Gauss{typeof(1.0m^3)}()
 
     # Create new transition list
-    transitions = create_transition_list()
+    transitions = TransitionList()
     addtransition!(transitions, UpdateEnergy(update_energy_usage!))
     addtransition!(transitions, UpdateEnvironment(update_peat_environment!))
     active_squares = 1:prod(grid)

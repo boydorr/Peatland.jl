@@ -66,7 +66,7 @@ abenv = peatlandAE(100.0m^3, grid, totalK, area, active)
 rel = Gauss{typeof(1.0m^3)}()
 
 # Create new transition list
-transitions = create_transition_list()
+transitions = TransitionList()
 addtransition!(transitions, UpdateEnergy(update_energy_usage!))
 addtransition!(transitions, UpdateEnvironment(update_peat_environment!))
 active_squares = findall(active[1:end])
