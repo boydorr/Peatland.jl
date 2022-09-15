@@ -34,8 +34,8 @@ function runsim()
     moss_size = uconvert.(m^2, moss_height .* 0.1m)
 
     #Set up how much energy each species consumes
-    req1 = moss_size .* rand(Normal(100.0, 0.1), numMoss) .* mm ./m^2
-    req2 = shrub_size .* rand(Normal(1.0, 0.1), numShrub) .* mm ./m^2
+    req1 = moss_size .* rand(Normal(10.0, 0.1), numMoss) .* mm ./m^2
+    req2 = shrub_size .* rand(Normal(10.0, 0.1), numShrub) .* mm ./m^2
     energy_vec = WaterRequirement([req1; req2])
 
     # Set rates for birth and death
@@ -48,14 +48,14 @@ function runsim()
     param = EqualPop(birth, death, longevity, survival, boost)
 
     # Create kernel for movement
-    kernel = fill(GaussianKernel(10.0m, 1e-3), numSpecies)
+    kernel = fill(GaussianKernel(20.0m, 1e-5), numSpecies)
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(Normal(120.0, 10.0), numMoss) .* m^3 
-    pref2 = abs.(rand(Normal(60.0, 20.0), numShrub)) .* m^3 
+    pref1 = rand(Normal(90.0, 13.0), numMoss) .* m^3 
+    pref2 = rand(Normal(75.0, 18.0), numMoss) .* m^3 
     opts = [pref1; pref2]
-    vars = [fill(5.0m^3, numMoss); fill(10.0m^3, numShrub)]
+    vars = [fill(10.0m^3, numMoss); fill(10.0m^3, numShrub)]
     water_traits = GaussTrait(opts, vars)
     ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
     soilDict = Dict("hygrophilous" => [8, 11], "terrestrial" => [1, 4, 5], "terrestrial/hygrophilous" => [1, 4, 5, 8, 11])

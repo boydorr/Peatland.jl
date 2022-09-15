@@ -1,6 +1,7 @@
 using EcoSISTEM: AbstractAbiotic
 using EcoSISTEM
 using SparseArrays
+using StaticArrays
 using Random
 
 import EcoSISTEM: AbstractLookup, getdimension, convert_coords, getlookup, calc_lookup_moves!,
@@ -101,19 +102,17 @@ end
 
 function move!(eco::AbstractEcosystem, ::BirthOnlyMovement, i::Int64, sp::Int64,
     grd::Array{Float64, 2}, births::Int64)
-  width, height = getdimension(eco)
-  (x, y) = convert_coords(eco, i, width)
-   lookup = getlookup(eco, sp)
-   lock(eco.cache.lock) do
-        calc_lookup_moves!(getboundary(eco.spplist.species.movement), x, y, sp, eco, births)
-        # Map moves to location in grid
-        mov = lookup.moves
-        for i in eachindex(lookup.x)
-            newx = mod(lookup.x[i] + x - 1, width) + 1
-            newy = mod(lookup.y[i] + y - 1, height) + 1
-            loc = convert_coords(eco, (newx, newy), width)
-            grd[sp, loc] += mov[i]
-        end
-   end
-  return eco
+    width, height = getdimension(eco)
+    (x, y) = convert_coords(eco, i, width)
+    lookup = getlookup(eco, sp)
+    calc_lookup_moves!(getboundary(eco.spplist.species.movement), x, y, sp, eco, births)
+    # Map moves to location in grid
+    mov = lookup.moves
+    for i in eachindex(lookup.x)
+        newx = mod(lookup.x[i] + x - 1, width) + 1
+        newy = mod(lookup.y[i] + y - 1, height) + 1
+        loc = convert_coords(eco, (newx, newy), width)
+        grd[sp, loc] += mov[i]
+    end
+    return eco
 end

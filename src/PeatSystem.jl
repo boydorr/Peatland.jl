@@ -17,7 +17,6 @@ mutable struct PeatCache{V <: Unitful.Volume} <: AbstractCache
   watermigration::Array{V, 2}
   totalE::Matrix{Float64}
   valid::Bool
-  lock::ReentrantLock
 end
 
 function create_peat_cache(abenv::A, sppl::SpeciesList{SpeciesTypes{TR, R, MO, T}},
@@ -26,7 +25,7 @@ nm = zeros(Float64, size(ml.matrix))
 sb = zeros(Int64, size(ml.matrix))
 wm = zeros(typeof(1.0m^3), _getdimension(abenv.habitat))
 totalE = zeros(Float64, (size(ml.matrix, 2), numrequirements(typeof(sppl.species.requirement))))
-return PeatCache{typeof(1.0m^3)}(nm, sb, wm, totalE, false, ReentrantLock())
+return PeatCache{typeof(1.0m^3)}(nm, sb, wm, totalE, false)
 end
 
 function PeatSystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticEnv,

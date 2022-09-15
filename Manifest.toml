@@ -354,7 +354,7 @@ version = "0.1.6"
 
 [[EcoSISTEM]]
 deps = ["ArchGDAL", "AxisArrays", "Calculus", "Conda", "DataFrames", "DataPipeline", "Dates", "Distributions", "Diversity", "EcoBase", "Feather", "HCubature", "HDF5", "HTTP", "IndexedTables", "InteractiveUtils", "Interpolations", "JLD2", "JLSO", "LibGit2", "Libdl", "LinearAlgebra", "Logging", "Markdown", "Measures", "Missings", "NetCDF", "ORCA", "OnlineStats", "OnlineStatsBase", "Phylo", "Pkg", "Printf", "REPL", "Random", "RecipesBase", "Requires", "Revise", "SHA", "SQLite", "SimpleSDMLayers", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "Unitful"]
-git-tree-sha1 = "9af992e6bfb3ec5a1ac33c1468d6327601f668f3"
+git-tree-sha1 = "3774a67325e2774a2c3e9d2a201eef5656102a45"
 repo-rev = "claireh93/generated-functions"
 repo-url = "https://github.com/EcoJulia/EcoSISTEM.jl.git"
 uuid = "ed2dc23b-ada4-5fdb-a26f-56368a14ad8f"
@@ -519,9 +519,9 @@ version = "0.66.2"
 
 [[GR_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Cairo_jll", "FFMPEG_jll", "Fontconfig_jll", "GLFW_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pixman_jll", "Pkg", "Qt5Base_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "2d908286d120c584abbe7621756c341707096ba4"
+git-tree-sha1 = "3697c23d09d5ec6f2088faa68f0d926b6889b5be"
 uuid = "d2c73de3-f751-5644-a686-071e5b155ba9"
-version = "0.66.2+0"
+version = "0.67.0+0"
 
 [[GeoFormatTypes]]
 git-tree-sha1 = "bb75ce99c9d6fb2edd8ef8ee474991cdacf12221"
