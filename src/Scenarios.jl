@@ -98,7 +98,7 @@ end
     Dry <: AbstractWindDown
 Rule where a particular location dries out over a set length of time.
 """
-mutable struct Dry <: AbstractPeatWindDown
+mutable struct Dry <: AbstractPeatSetUp
     location::Int64
     prob::Float64
     length::Unitful.Time
@@ -144,7 +144,7 @@ end
     Rewet <: AbstractWindDown
 Rule where a particular location is rewet over a set length of time.
 """
-mutable struct Rewet <: AbstractPeatWindDown
+mutable struct Rewet <: AbstractPeatSetUp
     location::Int64
     prob::Float64
     length::Unitful.Time
@@ -205,7 +205,7 @@ end
     LateralFlow <: AbstractWindDown
 Rule where water flows from a grid square to its neighbours depending on the elevation and length of shared boundaries.
 """
-mutable struct LateralFlow <: AbstractPeatWindDown
+mutable struct LateralFlow <: AbstractPeatPlace
     location::Int64
     neighbours::Matrix{Int64}
     boundaries::Vector{Float64}
