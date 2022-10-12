@@ -205,7 +205,7 @@ end
     LateralFlow <: AbstractWindDown
 Rule where water flows from a grid square to its neighbours depending on the elevation and length of shared boundaries.
 """
-mutable struct LateralFlow <: AbstractPeatPlace
+mutable struct LateralFlow <: AbstractPeatSetUp
     location::Int64
     neighbours::Matrix{Int64}
     boundaries::Vector{Float64}
