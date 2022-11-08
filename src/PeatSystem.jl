@@ -62,6 +62,7 @@ end
   eco.abundances.matrix .+= rand.(rng, Poisson.(eco.cache.netmigration))
 
   eco.abenv.habitat.h1.matrix .+= eco.cache.watermigration
+  eco.abenv.habitat.h1.matrix[eco.abenv.habitat.h1.matrix .< 0m^3] .= 0m^3
 
   # Invalidate all caches for next update
   invalidatecaches!(eco)
