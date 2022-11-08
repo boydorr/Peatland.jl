@@ -238,7 +238,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, 
     for i in 1:size(neighbours, 1)
         width = size(eco.abenv.habitat, 1)
         nei_loc = convert_coords(neighbours[i, 1], neighbours[i, 2], width)
-        drainage = rule.prob * timestep * rule.elevation[i] * (eco.abenv.habitat.h1.matrix[loc] - eco.abenv.habitat.h1.matrix[nei_loc])/(boundaries[i])
+        drainage = 0.5 * rule.prob * timestep * rule.elevation[i] * (eco.abenv.habitat.h1.matrix[loc] - eco.abenv.habitat.h1.matrix[nei_loc])/(boundaries[i])
         eco.cache.watermigration[loc] -= drainage
         eco.cache.watermigration[nei_loc] += drainage
     end
@@ -251,7 +251,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, 
     for i in 1:size(neighbours, 1)
         width = size(eco.abenv.habitat, 1)
         nei_loc = convert_coords(neighbours[i, 1], neighbours[i, 2], width)
-        drainage = rule.prob * timestep * rule.elevation[i] * (eco.abenv.habitat.matrix[loc] - eco.abenv.habitat.matrix[nei_loc])/(boundaries[i])
+        drainage = 0.5 * rule.prob * timestep * rule.elevation[i] * (eco.abenv.habitat.matrix[loc] - eco.abenv.habitat.matrix[nei_loc])/(boundaries[i])
         eco.cache.watermigration[loc] -= drainage
         eco.cache.watermigration[nei_loc] += drainage
     end
