@@ -23,4 +23,6 @@ export soiltrait, soilmatch
 include("Run.jl")
 export run_rule!
 
+include("ReadData.jl")
+export readCHESS
 end
