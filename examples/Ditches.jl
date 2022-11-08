@@ -13,7 +13,9 @@ using CSV
 using Distances
 using Shapefile
 using Diversity
-function runsim(ditch = false)
+
+### HISTORIC RAINFALL DATA 2010 - 2020 (REPEATED) ###
+function runPast(ditch = false; save = false, save_path = pwd())
     JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
     JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
 
@@ -75,18 +77,27 @@ function runsim(ditch = false)
     ele = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     ele.data[ele.data .< 0] .= 0
 
+    # If there are ditches, make sure they are lower than everything else around
+    if ditch
+        file = "data/Ditches_full.tif"
+        ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
+        ditch_locations = findall(.!isnan.(ditches))
+        locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
+        ele[locs] .= 0
+    end
+
     file = "data/CF_TPI_corrected.tif"
     tpi = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     tpi.data[tpi.data .< 0] .= 0
 
-    @load "data/RainfallBudget.jld2"
+    @load "data/RainfallBudget_burnin.jld2"
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
     abenv = peatlandAE(ele, soil, 10.0m^3, bud, active) 
     abenv.habitat.h1.matrix .*= tpi.data
     abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 10.0m^3] .= 10.0m^3
-    heatmap(ustrip.(abenv.habitat.h1.matrix)')
+    # heatmap(ustrip.(abenv.habitat.h1.matrix)')
 
     # Set relationship between species and environment (gaussian)
     rel = multiplicativeTR3(Gauss{typeof(1.0m^3)}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
@@ -109,7 +120,7 @@ function runsim(ditch = false)
             end
         end
     end
-    # Add in location based transitions
+    # Add in location based transitions and ditches
     for loc in eachindex(abenv.habitat.h1.matrix)
         if loc ∈ peat_squares
             drainage = 0.00001/month; flow = 0.05/month
@@ -121,12 +132,16 @@ function runsim(ditch = false)
     end
     # Add ditch drainage
     if ditch
-        file = "data/Ditches2.tif"
+        file = "data/Ditches_full.tif"
         ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
         ditch_locations = findall(.!isnan.(ditches))
+        # Alter drainage in these cells
         for d in ditch_locations
             loc = convert_coords(d[1], d[2], size(cf, 1))
-            addtransition!(transitions, Dry(loc, 1.0, 1month))
+            flow = transitions.setup[loc*2]
+            flux = transitions.setup[loc*2+1]
+            flow.prob = 1.0/month
+            flux.prob = 1.0/month
         end
     end
     transitions = specialise_transition_list(transitions)
@@ -152,112 +167,69 @@ function runsim(ditch = false)
 
     # Run simulation
     # Simulation Parameters
-    burnin = 20year; times = 20year; timestep = 1month;
-    record_interval = 1month
-    lensim = length(0years:record_interval:burnin)
+    burnin = 20year; times = 70year; timestep = 1month;
+    record_interval = 3months
+    lensim = length(0years:record_interval:times)
     # Burnin
     abuns = generate_storage(eco, lensim, 1)[:, :, :, 1]
     @time simulate!(eco, burnin, timestep, specialise = true);
-    @time simulate_record!(abuns, eco, times, record_interval, timestep, save = false, specialise = true);
+    @time simulate_record!(abuns, eco, times, record_interval, timestep, save = save, save_path = save_path, specialise = true);
     return abuns
 end
 
-abuns = runsim();
-
-# JLD2.save("data/CF_abuns.jld2", "abuns", abuns)
-# JLD2.@load "data/CF_abuns.jld2"
-
-sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
-sumabuns[.!active] .= NaN
-heatmap(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', size = (1000, 800), aspect_ratio = 1,
-margin = 1.0*Plots.inch, clim = (0, 900))
-Plots.pdf("Mosses.pdf")
-
-# Make taxonomic similarity matrix
-sppnames = [moss_spp[!, :Taxon_name]; peat_spp[!, :Species]]
-taxonomy = taxon.(sppnames)
-taxdat = [DataFrame(Species = t.species[1], Genus = t.genus[1], Family = t.family[1], Order = t.order[1], Class = t.class[1],
-Phylum = t.phylum[1]) for t in taxonomy]
-taxdat = vcat(taxdat..., cols = :union)
-taxdict = Dict(:Species => 1.0, :Genus => 0.75, :Family => 0.5, :Order => 0.25, :Class => 0.0, :Phylum => 0.0)
-Z = zeros(Float64, nrow(taxdat), nrow(taxdat))
-for i in 1:nrow(taxdat)
-    for j in 1:nrow(taxdat)
-        row = taxdat[i, :]
-        col = taxdat[j, :]
-        closest = findfirst(Vector(row) .== Vector(col))
-        if isnothing(closest)
-            Z[i, j] = 0.0
-        else
-            Z[i,j] = taxdict[Symbol(names(taxdat)[closest])]
-        end
-    end
-end
-
-meta = Metacommunity(abuns[:, :, end]./sum(abuns[:, :, end]), Z)
-div1 = reshape(norm_sub_alpha(meta, 0.0)[!, :diversity], size(abenv.habitat.h1.matrix))
-div1[active .& isnan.(div1)] .= 0
-heatmap(261000.0:10:266000.0, 289000.0:10:293000.0, div1', size = (1000, 800), aspect_ratio = 1,
-margin = 1.0*Plots.inch)
-Plots.pdf("Taxo_div.pdf")
-
-sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
-sumabuns[.!active] .= NaN
-heatmap(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', size = (1000, 800), aspect_ratio = 1,
-margin = 1.0*Plots.inch)
-Plots.pdf("Others.pdf")
+## WITHOUT DITCHES ##
+abuns = runPast();
+@save "/home/claireh/sdc/Peatland/Peatland_past_noditch.jld2" abuns=abuns[:, :, [12,end]]
 
 plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))
 for i in mosses
-    plot!(0:1/12:20,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
     title = "Mosses", colour = :grey, alpha = 0.1)
 end
-plot!(0:1/12:20, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
+plot!(0:1/12:70, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
     colour = :black)
 for i in shrubs
-    plot!(0:1/12:20,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 2,
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 2,
     title = "Shrubs, Herbs and Grasses", colour = :grey, alpha = 0.1)
 end
-plot!(0:1/12:20, mean(sum(abuns[shrubs, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 2,
+plot!(0:1/12:70, mean(sum(abuns[shrubs, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 2,
      colour = :black)
 for i in trees
-    plot!(0:1/12:20,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 3, 
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 3, 
     title = "Trees", colour = :grey, alpha = 0.1)
 end
-plot!(0:1/12:20, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
+plot!(0:1/12:70, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
    colour = :black)
 Plots.pdf("Abuns.pdf")
 
-abuns = runsim(true);
-
-sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
-sumabuns[.!active] .= NaN
-heatmap(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', size = (1000, 800), aspect_ratio = 1,
-margin = 1.0*Plots.inch, clim = (0, 900))
-Plots.pdf("Mosses_ditch.pdf")
+## WITH DITCHES ##
+abuns = runPast(true);
+@save "/home/claireh/sdc/Peatland/Peatland_past_ditch.jld2" abuns=abuns[:, :, [12,end]]
 
 plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))
 for i in mosses
-    plot!(0:1/12:20,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
     title = "Mosses", colour = :grey, alpha = 0.1)
 end
-plot!(0:1/12:20, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
+plot!(0:1/12:70, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
     colour = :black)
 for i in shrubs
-    plot!(0:1/12:20,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 2,
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 2,
     title = "Shrubs, Herbs and Grasses", colour = :grey, alpha = 0.1)
 end
-plot!(0:1/12:20, mean(sum(abuns[shrubs, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 2,
+plot!(0:1/12:70, mean(sum(abuns[shrubs, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 2,
      colour = :black)
 for i in trees
-    plot!(0:1/12:20,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 3, 
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 3, 
     title = "Trees", colour = :grey, alpha = 0.1)
 end
-plot!(0:1/12:20, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
+plot!(0:1/12:70, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
    colour = :black)
 Plots.pdf("Abuns_ditch.pdf")
 
-function runsim()
+### FUTURE RAINFALL SCENARIO 2010 - 2080 ###
+
+function runFuture(ditch::Bool = false; save = false, save_path = pwd())
     JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
     JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
 
@@ -318,19 +290,26 @@ function runsim()
     file = "data/CF_elevation_full.tif"
     ele = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     ele.data[ele.data .< 0] .= 0
-
+    # If there are ditches, make sure they are lower than everything else around
+    if ditch
+        file = "data/Ditches_full.tif"
+        ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
+        ditch_locations = findall(.!isnan.(ditches))
+        locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
+        ele[locs] .= 0
+    end
     file = "data/CF_TPI_corrected.tif"
     tpi = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     tpi.data[tpi.data .< 0] .= 0
 
-    @load "data/RainfallBudget.jld2"
+    @load "data/RainfallBudget_burnin.jld2"
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
     abenv = peatlandAE(ele, soil, 10.0m^3, bud, active) 
     abenv.habitat.h1.matrix .*= tpi.data
     abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 10.0m^3] .= 10.0m^3
-    heatmap(ustrip.(abenv.habitat.h1.matrix)')
+    # heatmap(ustrip.(abenv.habitat.h1.matrix)')
 
     # Set relationship between species and environment (gaussian)
     rel = multiplicativeTR3(Gauss{typeof(1.0m^3)}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
@@ -356,7 +335,7 @@ function runsim()
     # Add in location based transitions
     for loc in eachindex(abenv.habitat.h1.matrix)
         if loc ∈ peat_squares
-            drainage = 0.00001/month; flow = 0.0001/month
+            drainage = 0.00001/month; flow = 0.05/month
         else
             drainage = 0.006/month; flow = 0.5/month
         end
@@ -364,77 +343,168 @@ function runsim()
         addtransition!(transitions, WaterFlux(loc, drainage, 150.0m^3))
     end
 
-    transitions = specialise_transition_list(transitions)
     # Add ditch drainage
     if ditch
-        file = "data/Ditches.tif"
+        file = "data/Ditches_full.tif"
         ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
         ditch_locations = findall(.!isnan.(ditches))
+        # Alter drainage in these cells
         for d in ditch_locations
-            loc = convert_coords(d[2], d[1], size(cf, 1))
-            addtransition!(transitions, Dry(loc, 1.0, 1month))
+            loc = convert_coords(d[1], d[2], size(cf, 1))
+            flow = transitions.setup[loc*2]
+            flux = transitions.setup[loc*2+1]
+            flow.prob = 1.0/month
+            flux.prob = 1.0/month
         end
     end
+    transitions = specialise_transition_list(transitions)
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
 
-    # envs = zeros(lensim)
-    # for i in 1:lensim
-    #     EcoSISTEM.update!(eco, timestep, transitions)
-    #     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
-    # end
-    # plot(envs)
-
     # Run simulation
     # Simulation Parameters
-    burnin = 40year; times = 10year; timestep = 1month;
+    burnin = 20year; times = 70year; timestep = 1month;
     record_interval = 1month
     lensim = length(0years:record_interval:times)
     # Burnin
     abuns = generate_storage(eco, lensim, 1)[:, :, :, 1]
     abuns1 = generate_storage(eco, lensim, 1)[:, :, :, 1]
     abuns2 = generate_storage(eco, lensim, 1)[:, :, :, 1]
-    @time simulate!(eco, burnin, timestep)
-    @time simulate_record!(abuns, eco, times, record_interval, timestep, save = false);
+    @time simulate!(eco, burnin, timestep, specialise = true)
 
-    # for loc in active_squares
-    #     addtransition!(transitions, Peatland.Dry(loc, 10.0, times))
-    # end
-    # @time simulate_record!(abuns1, eco, times, record_interval, timestep, save = false);
-    # for loc in active_squares
-    #     addtransition!(transitions, Peatland.Rewet(loc, 10.0, times, 150.0m^3))
-    # end
-    # @time simulate_record!(abuns2, eco, times, record_interval, timestep, save = false);
-    # abuns = cat(abuns, abuns1, abuns2,  dims = 3)
-    # abuns = reshape(abuns, (numSpecies, grid[1], grid[2], lensim*3))
-    
+    @load "data/RainfallBudget_future.jld2"
+    eco.abenv.budget = bud
+    @time simulate_record!(abuns, eco, times, record_interval, timestep, save = save, save_path = save_path, specialise = true);
+
     return abuns
 end
 
-abuns = runsim()
+## WITHOUT DITCHES ##
+abuns = runFuture();
+@save "/home/claireh/sdc/Peatland/Peatland_future_noditch.jld2" abuns=abuns[:, :, [12,end]]
 
-
-
-times = 0:1/12:(30 + 2/12)
-p = plot(times, sum(abuns[1:numMoss, :, :, :, 1], dims = (1,2,3))[1, 1, 1, :], grid = false, label = "",
-layout = (3, 1), title = "Moss", size = (1000, 1200), margin = 1.0*Plots.inch)
-p = plot!(times, sum(abuns[shrubs, :, :, :, 1], dims = (1,2,3))[1, 1, 1, :], label = "",
-subplot = 2, color = 2, grid = false, title = "Shrubs, Herbs and Grasses", margin = 1.0*Plots.inch)
-p = plot!(times, sum(abuns[trees, :, :, :, 1], dims = (1,2,3))[1, 1, 1, :], label = "",
-subplot = 3, color = 3, grid = false, title = "Trees", margin = 1.0*Plots.inch)
-for i in 1:3
-    p = vline!(times, [5.0], color = :black, linestyle = :dot, label = "Drying", subplot = i)
-    p = vline!(times, [10.0], color = :black, linestyle = :dash, label = "Intervention", subplot = i)
+plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))
+for i in mosses
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
+    title = "Mosses", colour = :grey, alpha = 0.1)
 end
-p
-Plots.pdf("Drainage.pdf")
+plot!(0:1/12:70, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
+    colour = :black)
+for i in shrubs
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 2,
+    title = "Shrubs, Herbs and Grasses", colour = :grey, alpha = 0.1)
+end
+plot!(0:1/12:70, mean(sum(abuns[shrubs, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 2,
+     colour = :black)
+for i in trees
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 3, 
+    title = "Trees", colour = :grey, alpha = 0.1)
+end
+plot!(0:1/12:70, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
+   colour = :black)
+Plots.pdf("Abuns_future.pdf")
 
-file = "data/CF_outline.tif"
-cf = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
-active = Array(.!isnan.(Array(cf)))
 
-sumabuns = Float64.(sum(abuns[numMoss+1:end, :, :, end], dims = 1))[1, :, :]
+## WITH DITCHES ##
+abuns = runFuture(true);
+@save "/home/claireh/sdc/Peatland/Peatland_future_ditch.jld2" abuns=abuns[:, :, [12,end]]
+
+plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))
+for i in mosses
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
+    title = "Mosses", colour = :grey, alpha = 0.1)
+end
+plot!(0:1/12:70, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
+    colour = :black)
+for i in shrubs
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 2,
+    title = "Shrubs, Herbs and Grasses", colour = :grey, alpha = 0.1)
+end
+plot!(0:1/12:70, mean(sum(abuns[shrubs, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 2,
+     colour = :black)
+for i in trees
+    plot!(0:1/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 3, 
+    title = "Trees", colour = :grey, alpha = 0.1)
+end
+plot!(0:1/12:70, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
+   colour = :black)
+Plots.pdf("Abuns_future_ditch.pdf")
+
+
+# Plotting for paper
+# Heatmap for mosses
+heatmap(layout = (2,2), size = (1200, 1000), grid = false, aspect_ratio = 1, clim = (0, 600), titlelocation = :left,
+left_margin = 10*Plots.mm, guidefont = "Helvetica Bold", guidefontsize = 16, titlefontsize = 18)
+@load "data/Peatland_past_noditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
-heatmap(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', size = (1000, 800), aspect_ratio = 1,
-margin = 1.0*Plots.inch)
-Plots.pdf("EndDrainage.pdf")
+heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 1, c = :viridis,
+title = "A", xlab = "Without drainage", ylab = "2010 - 2020 (repeated)", guide_position = :top)
+@load "data/Peatland_past_ditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 2, c = :viridis,
+title = "B", xlab = "With drainage", guide_position = :top)
+@load "data/Peatland_future_noditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 3, c = :viridis,
+title = "C", ylab = "2010 - 2080")
+@load "data/Peatland_future_ditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 4, c = :viridis,
+title = "D")
+Plots.pdf("plots/Mosses_total.pdf")
+
+# Heatmap for shrubs
+heatmap(layout = (2,2), size = (1200, 1000), grid = false, aspect_ratio = 1, clim = (0, 50), titlelocation = :left,
+left_margin = 10*Plots.mm, guidefont = "Helvetica Bold", guidefontsize = 16, titlefontsize = 18)
+@load "data/Peatland_past_noditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 1, c = :viridis,
+title = "A", xlab = "Without drainage", ylab = "2010 - 2020 (repeated)", guide_position = :top)
+@load "data/Peatland_past_ditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 2, c = :viridis,
+title = "B", xlab = "With drainage", guide_position = :top)
+@load "data/Peatland_future_noditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 3, c = :viridis,
+title = "C", ylab = "2010 - 2080")
+@load "data/Peatland_future_ditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 4, c = :viridis,
+title = "D")
+Plots.pdf("plots/Others_total.pdf")
+
+# Change over time
+@load "data/Peatland_future_noditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+sumabuns2 = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns2[.!active] .= NaN
+heatmap(261000.0:10:266000.0, 289000.0:10:293000.0, (sumabuns .- sumabuns2)', c = :delta, clim = (-500, 500),
+layout = (1, 2), size = (1200, 700), aspect_ratio = 1, grid = false)
+
+sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+sumabuns2 = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns2[.!active] .= NaN
+heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, (sumabuns .- sumabuns2)', c = :delta, clim = (-60, 60),
+subplot = 2, aspect_ratio = 1)
+Plots.pdf("plots/Change.pdf")
+
+
+@load "data/Peatland_future_noditch.jld2"
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns[.!active] .= NaN
+@load "data/Peatland_future_ditch.jld2"
+sumabuns2 = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns2[.!active] .= NaN
+heatmap(261000.0:10:266000.0, 289000.0:10:293000.0, (sumabuns .- sumabuns2)', c = :delta, clim = (-200, 200),
+layout = (1, 2), size = (1200, 700), aspect_ratio = 1, grid = false)

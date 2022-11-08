@@ -218,7 +218,7 @@ function LateralFlow(abenv::GridAbioticEnv, ele::ContinuousHab, location::Int64,
     x, y = convert_coords(location, width)
     neighbours = get_neighbours(abenv.habitat.h1.matrix, x, y, 8)
     boundary_length = sqrt.((neighbours[:, 1] .- x).^2 + (neighbours[:, 2] .- y).^2)
-    elevation_diff = [(ele.matrix[neighbours[n, 1], neighbours[n, 2]] .- ele.matrix[x, y]) for n in 1:size(neighbours, 1)]
+    elevation_diff = [(ele.matrix[x, y] .- ele.matrix[neighbours[n, 1], neighbours[n, 2]]) for n in 1:size(neighbours, 1)]
     return LateralFlow(location, neighbours, boundary_length, elevation_diff, rate)
 end
 
