@@ -78,9 +78,9 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, ti
     hab = eco.abenv.habitat.h1.matrix[loc]
     rainfall = bud * area
     drainage = rule.prob * timestep * hab
-    hab = max(zero(typeof(drainage)), hab + rainfall - drainage)
+    eco.abenv.habitat.h1.matrix[loc] = max(zero(typeof(drainage)), hab + rainfall - drainage)
     runoff = max(zero(typeof(maxvol)),  hab - maxvol)
-    hab -= runoff
+    eco.abenv.habitat.h1.matrix[loc] -= runoff
 end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
@@ -217,7 +217,7 @@ function LateralFlow(abenv::GridAbioticEnv, ele::ContinuousHab, location::Int64,
     width = size(abenv.habitat, 1)
     x, y = convert_coords(location, width)
     neighbours = get_neighbours(abenv.habitat.h1.matrix, x, y, 8)
-    boundary_length = sqrt.((neighbours[:, 1] .- x).^2 + (neighbours[:, 2] .- y).^2)
+    boundary_length = 1 ./ sqrt.((neighbours[:, 1] .- x).^2 + (neighbours[:, 2] .- y).^2)
     elevation_diff = [(ele.matrix[x, y] .- ele.matrix[neighbours[n, 1], neighbours[n, 2]]) for n in 1:size(neighbours, 1)]
     return LateralFlow(location, neighbours, boundary_length, elevation_diff, rate)
 end
@@ -226,7 +226,7 @@ function LateralFlow(abenv::GridAbioticEnv, location::Int64, rate::typeof(1.0/mo
     width = size(abenv.habitat, 1)
     x, y = convert_coords(location, width)
     neighbours = get_neighbours(abenv.habitat.matrix, x, y, 8)
-    boundary_length = sqrt.((neighbours[:, 1] .- x).^2 + (neighbours[:, 2] .- y).^2)
+    boundary_length = 1 ./ sqrt.((neighbours[:, 1] .- x).^2 + (neighbours[:, 2] .- y).^2)
     elevation_diff = fill(1, size(neighbours, 1))
     return LateralFlow(location, neighbours, boundary_length, elevation_diff, rate)
 end
