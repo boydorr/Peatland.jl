@@ -72,11 +72,22 @@ end
   budgetupdate!(eco, timestep)
 end
 
+function update_ghostcells!(A::Array{T,2}; option="no-flux") where T
+	Atmp = @view A[:,:]
+	if option=="no-flux"
+		A[1, :] = Atmp[2, :]; Atmp[end, :] = Atmp[end-1, :]
+		A[:, 1] = Atmp[:, 2]; Atmp[:, end] = Atmp[:, end-1]
+	end
+end
+
 function update_peat_environment!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
   rng = eco.abundances.rngs[Threads.threadid()]
   eco.abundances.matrix .+= rand.(rng, Poisson.(eco.cache.netmigration))
 
   eco.abenv.habitat.matrix .+= eco.cache.watermigration
+  eco.abenv.habitat.matrix[eco.abenv.habitat.matrix .< 0m^3] .= 0m^3
+
+  update_ghostcells!(eco.abenv.habitat.matrix)
 
   # Invalidate all caches for next update
   invalidatecaches!(eco)
