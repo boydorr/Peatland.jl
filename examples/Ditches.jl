@@ -77,15 +77,6 @@ function runPast(ditch = false; save = false, save_path = pwd())
     ele = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     ele.data[ele.data .< 0] .= 0
 
-    # If there are ditches, make sure they are lower than everything else around
-    if ditch
-        file = "data/Ditches_full.tif"
-        ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
-        ditch_locations = findall(.!isnan.(ditches))
-        locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
-        ele[locs] .= 0
-    end
-
     file = "data/CF_TPI_corrected.tif"
     tpi = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     tpi.data[tpi.data .< 0] .= 0
@@ -97,6 +88,16 @@ function runPast(ditch = false; save = false, save_path = pwd())
     abenv = peatlandAE(ele, soil, 10.0m^3, bud, active) 
     abenv.habitat.h1.matrix .*= tpi.data
     abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 10.0m^3] .= 10.0m^3
+
+    # If there are ditches, make sure they are lower than everything else around and filled with water
+    if ditch
+        file = "data/Ditches_full.tif"
+        ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
+        ditch_locations = findall(.!isnan.(ditches))
+        locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
+        abenv.habitat.h1.matrix[locs] .= 200.0m^3
+        abenv.habitat.h2.matrix[locs] .= 0
+    end
     # heatmap(ustrip.(abenv.habitat.h1.matrix)')
 
     # Set relationship between species and environment (gaussian)
@@ -123,9 +124,9 @@ function runPast(ditch = false; save = false, save_path = pwd())
     # Add in location based transitions and ditches
     for loc in eachindex(abenv.habitat.h1.matrix)
         if loc ∈ peat_squares
-            drainage = 0.00001/month; flow = 0.05/month
+            drainage = 0.01/month; flow = 0.05/month
         else
-            drainage = 0.006/month; flow = 0.5/month
+            drainage = 0.06/month; flow = 0.5/month
         end
         addtransition!(transitions, LateralFlow(abenv, abenv.habitat.h2, loc, flow))
         addtransition!(transitions, WaterFlux(loc, drainage, 150.0m^3))
@@ -140,7 +141,7 @@ function runPast(ditch = false; save = false, save_path = pwd())
             loc = convert_coords(d[1], d[2], size(cf, 1))
             flow = transitions.setup[loc*2]
             flux = transitions.setup[loc*2+1]
-            flow.prob = 1.0/month
+            flow.prob = 0.5/month
             flux.prob = 1.0/month
         end
     end
@@ -148,8 +149,8 @@ function runPast(ditch = false; save = false, save_path = pwd())
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
 
-    # envs = zeros(lensim)
-    # for i in 1:lensim
+    # envs = zeros(10)
+    # for i in 1:10
     #     EcoSISTEM.update!(eco, timestep, transitions)
     #     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
     # end
