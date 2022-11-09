@@ -64,6 +64,8 @@ end
   eco.abenv.habitat.h1.matrix .+= eco.cache.watermigration
   eco.abenv.habitat.h1.matrix[eco.abenv.habitat.h1.matrix .< 0m^3] .= 0m^3
 
+  update_ghostcells!(eco.abenv.habitat.h1.matrix)
+
   # Invalidate all caches for next update
   invalidatecaches!(eco)
 
