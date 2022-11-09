@@ -234,7 +234,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, 
         diffusion_y = (uphill_y1 * eco.abenv.habitat.h1.matrix[x, y + 1] - 2*eco.abenv.habitat.h1.matrix[x, y] + uphill_y2 * eco.abenv.habitat.h1.matrix[x, y - 1])
         diffusion = rule.κ * timestep * (diffusion_x + diffusion_y)
 
-        eco.cache.watermigration[loc] += diffusion - advection
+        eco.cache.watermigration[loc] += diffusion + advection
     end
 end
 

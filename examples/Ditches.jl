@@ -73,11 +73,11 @@ function runPast(ditch = false; save = false, save_path = pwd())
         movement, param, native)
 
     # Create abiotic environment - even grid of one temperature
-    file = "data/CF_elevation_full.tif"
+    file = "data/CF_elevation_smooth.tif"
     ele = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     ele.data[ele.data .< 0] .= 0
 
-    file = "data/CF_TPI_corrected.tif"
+    file = "data/CF_TPI_smooth.tif"
     tpi = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     tpi.data[tpi.data .< 0] .= 0
 
@@ -95,8 +95,10 @@ function runPast(ditch = false; save = false, save_path = pwd())
         ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
         ditch_locations = findall(.!isnan.(ditches))
         locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
-        abenv.habitat.h1.matrix[locs] .= 200.0m^3
+        abenv.habitat.h1.matrix[locs] .= 0.0m^3
         abenv.habitat.h2.matrix[locs] .= 0
+    else
+        ditch_locations = []
     end
     # heatmap(ustrip.(abenv.habitat.h1.matrix)')
 
@@ -123,38 +125,29 @@ function runPast(ditch = false; save = false, save_path = pwd())
     end
     # Add in location based transitions and ditches
     for loc in eachindex(abenv.habitat.h1.matrix)
-        if loc ∈ peat_squares
-            drainage = 0.01/month; flow = 0.05/month
-        else
-            drainage = 0.06/month; flow = 0.5/month
-        end
-        addtransition!(transitions, LateralFlow(abenv, abenv.habitat.h2, loc, flow))
+        # if loc ∈ ditch_locations
+        #     drainage = 1.0/month
+        # else
+            drainage = 0.001/month
+        # end
+        κ = 0.01/month
+        λ = 0.01/month
+
+        addtransition!(transitions, LateralFlow(loc, κ, λ))
         addtransition!(transitions, WaterFlux(loc, drainage, 150.0m^3))
     end
-    # Add ditch drainage
-    if ditch
-        file = "data/Ditches_full.tif"
-        ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
-        ditch_locations = findall(.!isnan.(ditches))
-        # Alter drainage in these cells
-        for d in ditch_locations
-            loc = convert_coords(d[1], d[2], size(cf, 1))
-            flow = transitions.setup[loc*2]
-            flux = transitions.setup[loc*2+1]
-            flow.prob = 0.5/month
-            flux.prob = 1.0/month
-        end
-    end
+
     transitions = specialise_transition_list(transitions)
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
 
-    # envs = zeros(10)
-    # for i in 1:10
-    #     EcoSISTEM.update!(eco, timestep, transitions)
-    #     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
-    # end
-    # plot(envs)
+    envs = zeros(10)
+    for i in 1:10
+        EcoSISTEM.update!(eco, timestep, transitions)
+        envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
+    end
+    heatmap(ustrip.(eco.abenv.habitat.h1.matrix)')
+    #plot(envs)
 
     # hab = ustrip.(eco.abenv.habitat.h1.matrix)
     # #hab[.!active] .= NaN
