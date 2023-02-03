@@ -24,6 +24,16 @@ cf_bryo = CSV.File("data/records-2022-09-01.csv", normalizenames=true)
 cf_bryo = DataFrame(cf_bryo)
 cf_spp = cf_bryo[!, :Species_Name]
 moss_spp = filter(row -> row.Taxon_name ∈ cf_spp, moss_spp)
+#JLD2.save("data/Peat_30_moss.jld2", "moss_spp", moss_spp)
+
+# Add in some extra species from Cors Fochno reports and monitoring
+og_spp = CSV.File("data/Bryoatt_updated_2017/Bryoatt_updated_2017.csv", normalizenames=true)
+og_spp = DataFrame(og_spp)
+og_spp = filter(x -> !ismissing(x.Taxon_name), og_spp)
+cf_spp = DataFrame(CSV.File("data/CF_bryophytes.csv", normalizenames=true))
+extra_spp = filter(x -> x.Taxon_name ∈ cf_spp[!, :Name], og_spp)
+moss_spp = vcat(moss_spp, extra_spp)
+unique!(moss_spp)
 JLD2.save("data/Peat_30_moss.jld2", "moss_spp", moss_spp)
 
 peat_spp = CSV.File("data/Peatland30spp.csv", normalizenames=true)

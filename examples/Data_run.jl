@@ -80,7 +80,10 @@ for loc in active_squares
             addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
         end
     end
-    addtransition!(transitions, LateralFlow(abenv, loc, 1/600days))
+    κ = 0.01/month
+    λ = 0.01/month
+
+    addtransition!(transitions, LateralFlow(loc, κ, λ))
     addtransition!(transitions, WaterFlux(loc, 0.625/month))
 end
 

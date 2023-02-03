@@ -106,12 +106,11 @@ function proftest(n::Int64)
                 addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
             end
         end
-        if loc ∈ peat_squares
-            drainage = 0.00001/month; flow = 0.0001/month
-        else
-            drainage = 0.006/month; flow = 0.5/month
-        end
-        addtransition!(transitions, LateralFlow(abenv, abenv.habitat.h2, loc, flow))
+        drainage = 0.00001/month
+        κ = 0.01/month
+        λ = 0.01/month
+
+        addtransition!(transitions, LateralFlow(loc, κ, λ))
         addtransition!(transitions, WaterFlux(loc, drainage, 150.0m^3))
     end
 
