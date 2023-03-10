@@ -31,6 +31,8 @@ jobs:
           architecture: x86
           julia-version: '1.8'
       fail-fast: false
+    env:
+      PYTHON: ""
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
