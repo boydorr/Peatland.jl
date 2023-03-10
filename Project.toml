@@ -52,7 +52,7 @@ PhyloNetworks = "0.15.2"
 PhyloPlots = "1.0.0"
 Plots = "1.32.0"
 RCall = "0.13.13"
-Shapefile = "0.7.4"
+Shapefile = "0.7.4, 0.9"
 SimpleSDMLayers = "0.7.0"
 Unitful = "1.11.0"
 
