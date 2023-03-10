@@ -26,13 +26,7 @@ jobs:
           - x64
         experimental:
           - false
-        include:
-        - os: windows-latest
-          architecture: x86
-          julia-version: '1.8'
       fail-fast: false
-    env:
-      PYTHON: ""
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
