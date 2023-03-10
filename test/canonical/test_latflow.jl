@@ -68,7 +68,6 @@ using Test
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
     for i in 1:100
-        display(heatmap(ustrip.(eco.abenv.habitat.h1.matrix), clim = (0, 100)))
         EcoSISTEM.update!(eco, 1month, transitions)
     end
     @test eco.abenv.habitat.h1.matrix[5,5] > 90.0m^3
@@ -138,7 +137,6 @@ end
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
     for i in 1:100
-        display(heatmap(ustrip.(eco.abenv.habitat.h1.matrix), clim = (0, 150)))
         EcoSISTEM.update!(eco, 1month, transitions)
     end
 
@@ -217,7 +215,6 @@ end
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
     for i in 1:100
-        display(heatmap(ustrip.(eco.abenv.habitat.h1.matrix), clim = (0, 150)))
         EcoSISTEM.update!(eco, 1month, transitions)
     end
 

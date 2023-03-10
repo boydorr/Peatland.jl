@@ -3,7 +3,6 @@ using EcoSISTEM.Units
 using Peatland
 using Unitful, Unitful.DefaultSymbols
 using Distributions
-using Plots
 using Test
 
 @testset "Ageing" begin

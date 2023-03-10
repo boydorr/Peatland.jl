@@ -46,10 +46,8 @@ end
     @test EcoSISTEM._getsubcommunitynames(abenv) == abenv.names
     @test EcoSISTEM.getavailableenergy(abenv) == sum(abenv.budget.matrix)
 
-    loc = 1; prob = 0.1/day
-    rule = LateralFlow(abenv, loc, prob)
-    @test getlocation(rule) == loc
-    rule = LateralFlow(abenv, abenv.habitat.h2, loc, prob)
+    loc = 1; K = 0.1/day; λ = 0.1/day
+    rule = LateralFlow(loc, K, λ)
     @test getlocation(rule) == loc
 end
 

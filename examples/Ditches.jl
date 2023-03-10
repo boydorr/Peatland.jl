@@ -179,6 +179,7 @@ for i in mosses
     plot!(0:3/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
     title = "Mosses", colour = :grey, alpha = 0.1)
 end
+annotate!([-10], [7e6], ["A"])
 plot!(0:3/12:70, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
     colour = :black)
 for i in shrubs
@@ -204,6 +205,7 @@ for i in mosses
     plot!(0:3/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
     title = "Mosses", colour = :grey, alpha = 0.1)
 end
+annotate!([-10], [3.6e6], ["B"])
 plot!(0:3/12:70, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
     colour = :black)
 for i in shrubs
@@ -349,7 +351,7 @@ function runFuture(ditch::Bool = false; save = false, save_path = pwd())
 
     # Run simulation
     # Simulation Parameters
-    burnin = 20year; times = 70year; timestep = 1month;
+    burnin = 30year; times = 70year; timestep = 1month;
     record_interval = 3month
     lensim = length(0years:record_interval:times)
     # Burnin
@@ -374,6 +376,7 @@ for i in mosses
     plot!(0:3/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
     title = "Mosses", colour = :grey, alpha = 0.1)
 end
+annotate!([-10], [7e6], ["A"])
 plot!(0:3/12:70, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
     colour = :black)
 for i in shrubs
@@ -400,6 +403,7 @@ for i in mosses
     plot!(0:3/12:70,sum(abuns[i, :, :], dims = 1)[1, :,], grid = false, label = "", subplot = 1,
     title = "Mosses", colour = :grey, alpha = 0.1)
 end
+annotate!([-10], [3.6e6], ["B"])
 plot!(0:3/12:70, mean(sum(abuns[mosses, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 1,
     colour = :black)
 for i in shrubs
@@ -470,18 +474,20 @@ Plots.pdf("plots/Others_total.pdf")
 
 # Change over time
 @load "data/Peatland_future_noditch.jld2"
-sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
-sumabuns2 = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns2 = Float64.(reshape(sum(abuns[1:numMoss, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns2[.!active] .= NaN
 heatmap(261000.0:10:266000.0, 289000.0:10:293000.0, (sumabuns .- sumabuns2)', c = :delta, clim = (-500, 500),
-layout = (1, 2), size = (1200, 700), aspect_ratio = 1, grid = false)
+layout = (1, 2), size = (1200, 700), aspect_ratio = 1, grid = false, title = "A", titlelocation = :left,
+left_margin = 10*Plots.mm, guidefont = "Helvetica Bold", guidefontsize = 16, titlefontsize = 18)
 
-sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
-sumabuns2 = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns2 = Float64.(reshape(sum(abuns[numMoss+1:end, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns2[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, (sumabuns .- sumabuns2)', c = :delta, clim = (-60, 60),
-subplot = 2, aspect_ratio = 1)
+subplot = 2, aspect_ratio = 1, title = "B", titlelocation = :left,
+left_margin = 10*Plots.mm, guidefont = "Helvetica Bold", guidefontsize = 16, titlefontsize = 18)
 Plots.pdf("plots/Change.pdf")
 

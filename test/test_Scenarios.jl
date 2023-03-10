@@ -6,14 +6,14 @@ using Unitful, Unitful.DefaultSymbols
 import EcoSISTEM: getprob, getspecies, getlocation
 
 @testset "Basic scenarios" begin
-    spp = 1; loc = 1; prob = 1.0/day
+    spp = 1; loc = 1; prob = 1.0/day; maxVol = 100.0m^3
     
     rule = Invasive(spp, loc, prob)
     @test getspecies(rule) == spp
     @test getlocation(rule) == loc
     @test getprob(rule) == prob
 
-    rule = WaterFlux(loc, prob)
+    rule = WaterFlux(loc, prob, maxVol)
     @test getlocation(rule) == loc
     @test rule.prob == prob
 

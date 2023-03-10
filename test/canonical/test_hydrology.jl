@@ -61,15 +61,13 @@ using Test
             addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
             addtransition!(transitions, SeedDisperse(spp, loc))
             addtransition!(transitions, WaterUse(spp, loc, 0.01))
-            if spp > numMoss
-                addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
-            end
+            addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
         end
         κ = 0.01/month
         λ = 0.01/month
 
         addtransition!(transitions, LateralFlow(loc, κ, λ))
-        addtransition!(transitions, WaterFlux(loc, 0.625/month))
+        addtransition!(transitions, WaterFlux(loc, 0.625/month, 100.0m^3))
     end
 
 
@@ -100,7 +98,7 @@ using Test
     @test sum_dried < sum_hydro
 
     for loc in active_squares
-        addtransition!(transitions, Peatland.Rewet(loc, 0.5, 1year, 150.0m^3))
+        addtransition!(transitions, Peatland.Rewet(loc, 0.5, 1year, 100.0m^3))
     end
 
     @time simulate_record!(abuns2, eco, times2, record_interval, timestep);

@@ -89,7 +89,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, ti
     area = getgridsize(eco)^2
     rainfall = eco.abenv.budget.matrix[loc] * area
     drainage = rule.prob * timestep * eco.abenv.habitat.matrix[loc]
-    eco.abenv.habitat.matrix[loc] = max(0.0m^3, eco.abenv.habitat.h1.matrix[loc] + rainfall - drainage)
+    eco.abenv.habitat.matrix[loc] = max(0.0m^3, eco.abenv.habitat.matrix[loc] + rainfall - drainage)
     runoff = max(zero(typeof(maxvol)), eco.abenv.habitat.matrix[loc] - maxvol)
     eco.abenv.habitat.matrix[loc] -= runoff
 end
