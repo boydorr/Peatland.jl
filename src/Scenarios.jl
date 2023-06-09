@@ -224,9 +224,9 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, 
         v1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - eco.abenv.habitat.h2.matrix[x, y - 1])/2
         v2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, y - 1])
         advection_x1 =  u1 * (eco.abenv.habitat.h1.matrix[x + 1, y] - eco.abenv.habitat.h1.matrix[x - 1, y])/2
-        advection_x2 = u2 * eco.abenv.habitat.h2.matrix[x, y]
+        advection_x2 = u2 * eco.abenv.habitat.h1.matrix[x, y]
         advection_y1 = v1 * (eco.abenv.habitat.h1.matrix[x, y + 1] - eco.abenv.habitat.h1.matrix[x, y - 1])/2
-        advection_y2 = v2 * eco.abenv.habitat.h2.matrix[x, y]
+        advection_y2 = v2 * eco.abenv.habitat.h1.matrix[x, y]
         advection = advection_x1 + advection_x2 + advection_y1 + advection_y2
 
         diffusion_x = (eco.abenv.habitat.h1.matrix[x + 1, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x - 1, y])
