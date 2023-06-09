@@ -473,7 +473,7 @@ title = "D")
 Plots.pdf("plots/Others_total.pdf")
 
 # Change over time
-@load "data/Peatland_future_noditch.jld2"
+@load "data/Peatland_future_ditch.jld2"
 sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 sumabuns2 = Float64.(reshape(sum(abuns[1:numMoss, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
