@@ -1,0 +1,12 @@
+run_metadata:
+  default_input_namespace: testing
+  description: Peatland Model julia
+  script: |
+    julia --project=examples -e "using Pkg; Pkg.instantiate()"
+    julia --project=examples examples/Test.jl
+
+write:
+- data_product: PeatlandTest
+  description: Plot of peatland species abundance
+  file_type: pdf
+  
