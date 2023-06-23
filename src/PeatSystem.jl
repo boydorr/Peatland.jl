@@ -15,6 +15,8 @@ mutable struct PeatCache{V <: Unitful.Volume} <: AbstractCache
   netmigration::Array{Float64, 2}
   seedbank::Array{Int64, 2}
   watermigration::Array{V, 2}
+  surfacemigration::Array{V, 2}
+  surfacewater::Array{V, 2}
   totalE::Matrix{Float64}
   valid::Bool
 end
@@ -24,8 +26,10 @@ function create_peat_cache(abenv::A, sppl::SpeciesList{SpeciesTypes{TR, R, MO, T
 nm = zeros(Float64, size(ml.matrix))
 sb = zeros(Int64, size(ml.matrix))
 wm = zeros(typeof(1.0m^3), _getdimension(abenv.habitat))
+sm = zeros(typeof(1.0m^3), _getdimension(abenv.habitat))
+sw = zeros(typeof(1.0m^3), _getdimension(abenv.habitat))
 totalE = zeros(Float64, (size(ml.matrix, 2), numrequirements(typeof(sppl.species.requirement))))
-return PeatCache{typeof(1.0m^3)}(nm, sb, wm, totalE, false)
+return PeatCache{typeof(1.0m^3)}(nm, sb, wm, sm, sw, totalE, false)
 end
 
 function PeatSystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticEnv,
@@ -54,6 +58,7 @@ function PeatSystem(popfun::F, spplist::SpeciesList{T, Req}, abenv::GridAbioticE
   eco.cache.netmigration .= 0
   eco.cache.seedbank .= 0
   eco.cache.watermigration .= 0m^3
+  eco.cache.surfacemigration .= 0m^3
   eco.cache.valid = false
 end
 
@@ -63,6 +68,9 @@ end
 
   eco.abenv.habitat.h1.matrix .+= eco.cache.watermigration
   eco.abenv.habitat.h1.matrix[eco.abenv.habitat.h1.matrix .< 0m^3] .= 0m^3
+
+  eco.cache.surfacewater .+= eco.cache.surfacemigration
+  eco.cache.surfacewater[eco.cache.surfacewater .< 0m^3] .= 0m^3
 
   update_ghostcells!(eco.abenv.habitat.h1.matrix)
 

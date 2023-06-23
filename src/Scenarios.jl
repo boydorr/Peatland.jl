@@ -8,6 +8,7 @@ import EcoSISTEM: DayType, AbstractPlaceTransition, AbstractStateTransition, Abs
 AbstractAbiotic, _run_rule!, getspecies, getlocation, getprob, TimeType, Lookup, _getdimension,
 _symmetric_grid, move!, get_neighbours, convert_coords
 const WaterTimeType = typeof(1.0m^3/day)
+const AreaTimeType = typeof(1.0m^2/day)
 const VolType = typeof(1.0m^3)
 const LengthType = typeof(1.0m)
 
@@ -20,7 +21,7 @@ abstract type AbstractPeatWindDown <: AbstractWindDown end
     Invasive <: AbstractStateTransition
 Rule where an invasive species is added at a location with probability `prob`.
 """
-mutable struct Invasive <: AbstractPeatState
+mutable struct Invasive <: AbstractStateTransition
     species::Int64
     location::Int64
     prob::DayType
@@ -45,7 +46,7 @@ end
     WindDispersal <: AbstractPlaceTransition
 Rule where a species is wind dispersed with an updating WALD kernel.
 """
-mutable struct WindDispersal <: AbstractPeatPlace
+mutable struct WindDispersal <: AbstractPlaceTransition
     species::Int64
     location::Int64
     canopyheight::LengthType
@@ -64,11 +65,37 @@ end
     WaterFlux <: AbstractSetUp
 Rule where a particular location receives rainfall up to a maximum volume of `maxvol` and drains at a probability `prob`.
 """
-mutable struct WaterFlux <: AbstractPeatSetUp
+mutable struct WaterFlux <: AbstractSetUp
     location::Int64
-    prob::DayType
+    drainage::DayType
+    infiltration::DayType
+    evaporation::DayType
     maxvol::VolType
+    function WaterFlux(location::Int64, drain::T, infil::T, evap::T, maxvol::VolType) where T
+        drain = uconvert(unit(DayType), drain)
+        infil = uconvert(unit(DayType), infil)
+        evap = uconvert(unit(DayType), evap)
+        new(location, drain, infil, evap, maxvol)
+    end
 end
+
+# function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
+#     loc = rule.location
+#     maxvol = rule.maxvol
+#     area = getgridsize(eco)^2
+#     bud = eco.abenv.budget.matrix[loc]
+#     hab = eco.abenv.habitat.h1.matrix[loc]
+#     rainfall = bud * area
+#     eco.cache.surfacewater[loc] += rainfall
+#     infiltration = rule.infiltration * timestep * eco.cache.surfacewater[loc]
+#     eco.cache.surfacewater[loc] = max(zero(typeof(infiltration)), eco.cache.surfacewater[loc] - infiltration)
+#     drainage = rule.drainage * timestep * hab
+#     eco.abenv.habitat.h1.matrix[loc] = max(zero(typeof(drainage)), hab + infiltration - drainage)
+#     runoff = max(zero(typeof(maxvol)),  hab - maxvol)
+#     eco.abenv.habitat.h1.matrix[loc] -= runoff
+#     evaporation = rule.evaporation * timestep * eco.cache.surfacewater[loc]
+#     eco.cache.surfacewater[loc] += runoff - evaporation
+# end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
     loc = rule.location
@@ -77,10 +104,10 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, ti
     bud = eco.abenv.budget.matrix[loc]
     hab = eco.abenv.habitat.h1.matrix[loc]
     rainfall = bud * area
-    drainage = rule.prob * timestep * hab
+    drainage = rule.drainage * timestep * hab
     eco.abenv.habitat.h1.matrix[loc] = max(zero(typeof(drainage)), hab + rainfall - drainage)
-    # runoff = max(zero(typeof(maxvol)),  hab - maxvol)
-    # eco.abenv.habitat.h1.matrix[loc] -= runoff
+    runoff = max(zero(typeof(maxvol)),  hab - maxvol)
+    eco.abenv.habitat.h1.matrix[loc] -= runoff
 end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
@@ -88,17 +115,18 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, ti
     maxvol = rule.maxvol
     area = getgridsize(eco)^2
     rainfall = eco.abenv.budget.matrix[loc] * area
-    drainage = rule.prob * timestep * eco.abenv.habitat.matrix[loc]
+    drainage = rule.drainage * timestep * eco.abenv.habitat.matrix[loc]
     eco.abenv.habitat.matrix[loc] = max(0.0m^3, eco.abenv.habitat.matrix[loc] + rainfall - drainage)
     # runoff = max(zero(typeof(maxvol)), eco.abenv.habitat.matrix[loc] - maxvol)
     # eco.abenv.habitat.matrix[loc] -= runoff
+    # eco.cache.surfacewater[loc] += runoff
 end
 
 """
     Dry <: AbstractWindDown
 Rule where a particular location dries out over a set length of time.
 """
-mutable struct Dry <: AbstractPeatSetUp
+mutable struct Dry <: AbstractSetUp
     location::Int64
     prob::Float64
     length::Unitful.Time
@@ -144,7 +172,7 @@ end
     Rewet <: AbstractWindDown
 Rule where a particular location is rewet over a set length of time.
 """
-mutable struct Rewet <: AbstractPeatSetUp
+mutable struct Rewet <: AbstractSetUp
     location::Int64
     prob::Float64
     length::Unitful.Time
@@ -173,7 +201,7 @@ end
     WaterUse <: AbstractStateTransition
 Rule where a species at a location uses up the available soil moisture, given by `soil_moisture_frac`, according to its water use need.
 """
-mutable struct WaterUse <: AbstractPeatState
+mutable struct WaterUse <: AbstractStateTransition
     species::Int64
     location::Int64
     soil_moisture_frac::Float64
@@ -205,32 +233,66 @@ end
     LateralFlow <: AbstractWindDown
 Rule where water flows from a grid square to its neighbours depending on the elevation and length of shared boundaries.
 """
-mutable struct LateralFlow <: AbstractPeatWindDown
+mutable struct LateralFlow <: AbstractStateTransition
     location::Int64
-    κ::DayType
-    λ::DayType
+    κ::AreaTimeType
+    λ::AreaTimeType
+    maxvol::VolType
 end
+
+function getspecies(rule::LateralFlow)
+    return 1
+end
+
+# function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
+#     loc = rule.location
+#     x, y = convert_coords(loc, size(eco.abenv.habitat, 1))
+#     gs = getgridsize(eco)
+#     maxX = size(eco.abenv.habitat, 1)
+#     maxY = size(eco.abenv.habitat, 2)
+#     if (x > 1) && (x < maxX) && (y > 1) && (y < maxY)
+#         update_ghostcells!(eco.abenv.habitat.h1.matrix)
+
+#         u1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x + 1, y] - eco.abenv.habitat.h2.matrix[x - 1, y]) / 2gs
+#         u2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x + 1, y] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x - 1, y]) / gs^2
+#         v1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - eco.abenv.habitat.h2.matrix[x, y - 1]) / 2gs
+#         v2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, y - 1]) / gs^2
+#         advection_x1 =  u1 * (eco.cache.surfacewater[x + 1, y] - eco.cache.surfacewater[x - 1, y]) / 2gs
+#         advection_x2 = u2 * eco.cache.surfacewater[x, y]
+#         advection_y1 = v1 * (eco.cache.surfacewater[x, y + 1] - eco.cache.surfacewater[x, y - 1]) / 2gs
+#         advection_y2 = v2 * eco.cache.surfacewater[x, y]
+#         advection = advection_x1 + advection_x2 + advection_y1 + advection_y2
+
+#         diffusion_x = (eco.abenv.habitat.h1.matrix[x + 1, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x - 1, y]) / gs^2
+#         diffusion_y = (eco.abenv.habitat.h1.matrix[x, y + 1] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, y - 1]) / gs^2
+#         diffusion = rule.κ * timestep * (diffusion_x + diffusion_y)
+
+#         eco.cache.watermigration[loc] += diffusion 
+#         eco.cache.surfacemigration[loc] += advection
+#     end
+# end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
     loc = rule.location
     x, y = convert_coords(loc, size(eco.abenv.habitat, 1))
+    gs = getgridsize(eco)
     maxX = size(eco.abenv.habitat, 1)
     maxY = size(eco.abenv.habitat, 2)
     if (x > 1) && (x < maxX) && (y > 1) && (y < maxY)
         update_ghostcells!(eco.abenv.habitat.h1.matrix)
 
-        u1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x + 1, y] - eco.abenv.habitat.h2.matrix[x - 1, y])/2
-        u2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x + 1, y] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x - 1, y])
-        v1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - eco.abenv.habitat.h2.matrix[x, y - 1])/2
-        v2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, y - 1])
-        advection_x1 =  u1 * (eco.abenv.habitat.h1.matrix[x + 1, y] - eco.abenv.habitat.h1.matrix[x - 1, y])/2
+        u1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x + 1, y] - eco.abenv.habitat.h2.matrix[x - 1, y]) / 2gs
+        u2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x + 1, y] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x - 1, y]) / gs^2
+        v1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - eco.abenv.habitat.h2.matrix[x, y - 1]) / 2gs
+        v2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, y - 1]) / gs^2
+        advection_x1 =  u1 * (eco.abenv.habitat.h1.matrix[x + 1, y] - eco.abenv.habitat.h1.matrix[x - 1, y]) / 2gs
         advection_x2 = u2 * eco.abenv.habitat.h1.matrix[x, y]
-        advection_y1 = v1 * (eco.abenv.habitat.h1.matrix[x, y + 1] - eco.abenv.habitat.h1.matrix[x, y - 1])/2
+        advection_y1 = v1 * (eco.abenv.habitat.h1.matrix[x, y + 1] - eco.abenv.habitat.h1.matrix[x, y - 1]) / 2gs
         advection_y2 = v2 * eco.abenv.habitat.h1.matrix[x, y]
         advection = advection_x1 + advection_x2 + advection_y1 + advection_y2
 
-        diffusion_x = (eco.abenv.habitat.h1.matrix[x + 1, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x - 1, y])
-        diffusion_y = (eco.abenv.habitat.h1.matrix[x, y + 1] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, y - 1])
+        diffusion_x = (eco.abenv.habitat.h1.matrix[x + 1, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x - 1, y]) / gs^2
+        diffusion_y = (eco.abenv.habitat.h1.matrix[x, y + 1] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, y - 1]) / gs^2
         diffusion = rule.κ * timestep * (diffusion_x + diffusion_y)
 
         eco.cache.watermigration[loc] += diffusion + advection

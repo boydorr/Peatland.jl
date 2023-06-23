@@ -20,9 +20,9 @@ export PeatSystem, update_peat_environment!
 include("Traits.jl")
 export soiltrait, soilmatch
 
-include("Run.jl")
-export run_rule!
+# include("Run.jl")
+# export run_rule!
 
 include("ReadData.jl")
-export readCHESS
+export readCHESS, readSoilCHESS
 end
