@@ -1,0 +1,9 @@
+# ignore plots
+*.pdf
+*.png
+*.svg
+*.gif
+
+#ignore data
+/data
+/.fair
