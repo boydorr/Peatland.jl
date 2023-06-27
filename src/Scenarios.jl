@@ -71,7 +71,7 @@ mutable struct WaterFlux <: AbstractSetUp
     maxvol::VolType
     function WaterFlux(location::Int64, drain::T, maxvol::VolType) where T
         drain = uconvert(unit(DayType), drain)
-        new(location, drain, infil, evap, maxvol)
+        new(location, drain, maxvol)
     end
 end
 

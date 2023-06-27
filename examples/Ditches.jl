@@ -53,8 +53,8 @@ function runPast(ditch = false; save = false, save_path = pwd())
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(Normal(90.0, 13.0), numMoss) .* m^3 
-    pref2 = rand(Normal(70.0, 18.0), numShrub) .* m^3 
+    pref1 = rand(TruncatedNormal(20.0, 1.50, 0.0, Inf), numMoss) .* m^3 
+    pref2 = rand(TruncatedNormal(7.0, 1.50, 0.0, Inf), numShrub) .* m^3 
     opts = [pref1; pref2]
     vars = [fill(10.0m^3, numMoss); fill(10.0m^3, numShrub)]
     water_traits = GaussTrait(opts, vars)
@@ -83,21 +83,21 @@ function runPast(ditch = false; save = false, save_path = pwd())
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
-    abenv = peatlandAE(ele, soil, 10.0m^3, bud, active) 
+    abenv = peatlandAE(ele, soil, 1.0m^3, bud, active) 
     abenv.habitat.h1.matrix .*= tpi.data
-    abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 10.0m^3] .= 10.0m^3
+    abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 1.0m^3] .= 1.0m^3
 
     # If there are ditches, make sure they are lower than everything else around and filled with water
     if ditch
         file = "data/Ditches_full.tif"
         ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
         ditch_locations = findall(.!isnan.(ditches))
-        locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
-        abenv.habitat.h1.matrix[locs] .= 0.0m^3
-        abenv.habitat.h2.matrix[locs] .= 0
+        ditch_locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
+        abenv.habitat.h1.matrix[ditch_locs] .= 0.0m^3
+        abenv.habitat.h2.matrix[ditch_locs] .= 0
         abenv.active[ditch_locations] .= false
     else
-        ditch_locations = []
+        ditch_locs = []
     end
     # heatmap(ustrip.(abenv.habitat.h1.matrix)')
 
@@ -110,6 +110,7 @@ function runPast(ditch = false; save = false, save_path = pwd())
     addtransition!(transitions, UpdateEnvironment(update_peat_environment!))
     active_squares = findall(active[1:end])
     peat_squares = findall(soil .== 11)
+    peat_locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in peat_squares]
     # Add in species based transitions (only for active squares)
     for spp in eachindex(sppl.species.names) 
         for loc in active_squares
@@ -123,17 +124,26 @@ function runPast(ditch = false; save = false, save_path = pwd())
         end
     end
     # Add in location based transitions and ditches
-    for loc in eachindex(abenv.habitat.h1.matrix)
-        # if loc ∈ ditch_locations
-        #     drainage = 1.0/month
-        # else
-            drainage = 0.001/month
-        # end
-        κ = 0.01/month
-        λ = 0.01/month
-
-        addtransition!(transitions, LateralFlow(loc, κ, λ))
-        addtransition!(transitions, WaterFlux(loc, drainage, 150.0m^3))
+    not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), ditch_locs)
+    for loc in ditch_locs
+        drainage = 1.0/month
+        κ = 1.0m^2/month
+        ν = 10.0m^2/month
+        addtransition!(transitions, LateralFlow(loc, κ, ν, 20.0m^3))
+        addtransition!(transitions, WaterFlux(loc, drainage, 20.0m^3))
+    end
+    for loc in not_drains
+        if loc ∈ peat_locs
+            drainage = 0.2/month
+            κ = 0.1m^2/month
+            ν = 1.0m^2/month
+        else
+            drainage = 0.5/month
+            κ = 1.0m^2/month
+            ν = 10.0m^2/month
+        end
+        addtransition!(transitions, LateralFlow(loc, κ, ν, 20.0m^3))
+        addtransition!(transitions, WaterFlux(loc, drainage, 20.0m^3))
     end
 
     transitions = specialise_transition_list(transitions)
