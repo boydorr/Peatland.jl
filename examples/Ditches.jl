@@ -129,8 +129,8 @@ function runPast(ditch = false; save = false, save_path = pwd())
         drainage = 1.0/month
         κ = 1.0m^2/month
         ν = 10.0m^2/month
-        addtransition!(transitions, LateralFlow(loc, κ, ν, 20.0m^3))
-        addtransition!(transitions, WaterFlux(loc, drainage, 20.0m^3))
+        addtransition!(transitions, LateralFlow(loc, κ, ν, 100.0m^3))
+        addtransition!(transitions, WaterFlux(loc, drainage, 100.0m^3))
     end
     for loc in not_drains
         if loc ∈ peat_locs
@@ -142,8 +142,8 @@ function runPast(ditch = false; save = false, save_path = pwd())
             κ = 1.0m^2/month
             ν = 10.0m^2/month
         end
-        addtransition!(transitions, LateralFlow(loc, κ, ν, 20.0m^3))
-        addtransition!(transitions, WaterFlux(loc, drainage, 20.0m^3))
+        addtransition!(transitions, LateralFlow(loc, κ, ν, 100.0m^3))
+        addtransition!(transitions, WaterFlux(loc, drainage, 100.0m^3))
     end
 
     transitions = specialise_transition_list(transitions)

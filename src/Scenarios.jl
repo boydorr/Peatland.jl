@@ -102,8 +102,8 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, ti
     rainfall = bud * area
     drainage = rule.drainage * timestep * hab
     eco.abenv.habitat.h1.matrix[loc] = max(zero(typeof(drainage)), hab + rainfall - drainage)
-    # runoff = max(zero(typeof(maxvol)),  hab - maxvol)
-    # eco.abenv.habitat.h1.matrix[loc] -= runoff
+    runoff = max(zero(typeof(maxvol)),  hab - maxvol)
+    eco.abenv.habitat.h1.matrix[loc] -= runoff
 end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}

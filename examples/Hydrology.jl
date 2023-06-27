@@ -154,8 +154,8 @@ function buildEco(timestep::Unitful.Time; ditch = true)
             κ = 1.0m^2/month
             ν = 10.0m^2/month
         end
-        addtransition!(transitions, LateralFlow(loc, κ, ν, 20.0m^3))
-        addtransition!(transitions, WaterFlux(loc, drainage, 20.0m^3))
+        addtransition!(transitions, LateralFlow(loc, κ, ν, 100.0m^3))
+        addtransition!(transitions, WaterFlux(loc, drainage, 100.0m^3))
     end
 
     transitions = specialise_transition_list(transitions)
