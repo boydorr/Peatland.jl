@@ -182,7 +182,7 @@ end
 
 ## WITHOUT DITCHES ##
 abuns = runPast();
-@save "/home/claireh/sdc/Peatland/Peatland_past_noditch.jld2" abuns=abuns[:, :, [12,end]]
+@save "/home/claireh/sdc/Peatland/Peatland_past_noditch_new.jld2" abuns=abuns[:, :, [12,end]]
 
 plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))
 for i in mosses
@@ -204,11 +204,11 @@ for i in trees
 end
 plot!(0:3/12:70, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
    colour = :black)
-Plots.pdf("Abuns.pdf")
+Plots.pdf("Abuns_new.pdf")
 
 ## WITH DITCHES ##
 abuns = runPast(true);
-@save "/home/claireh/sdc/Peatland/Peatland_past_ditch.jld2" abuns=abuns[:, :, [12,end]]
+@save "/home/claireh/sdc/Peatland/Peatland_past_ditch_new.jld2" abuns=abuns[:, :, [12,end]]
 
 plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))
 for i in mosses
@@ -230,12 +230,12 @@ for i in trees
 end
 plot!(0:3/12:70, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
    colour = :black)
-Plots.pdf("Abuns_ditch.pdf")
+Plots.pdf("Abuns_ditch_new.pdf")
 
 ### FUTURE RAINFALL SCENARIO 2010 - 2080 ###
 
 function runFuture(ditch::Bool = false; save = false, save_path = pwd())
-    JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
+        JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
     JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
 
     file = "data/CF_outline.tif"
@@ -272,8 +272,8 @@ function runFuture(ditch::Bool = false; save = false, save_path = pwd())
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(Normal(90.0, 13.0), numMoss) .* m^3 
-    pref2 = rand(Normal(70.0, 18.0), numShrub) .* m^3 
+    pref1 = rand(TruncatedNormal(20.0, 1.50, 0.0, Inf), numMoss) .* m^3 
+    pref2 = rand(TruncatedNormal(7.0, 1.50, 0.0, Inf), numShrub) .* m^3 
     opts = [pref1; pref2]
     vars = [fill(10.0m^3, numMoss); fill(10.0m^3, numShrub)]
     water_traits = GaussTrait(opts, vars)
@@ -302,21 +302,21 @@ function runFuture(ditch::Bool = false; save = false, save_path = pwd())
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
-    abenv = peatlandAE(ele, soil, 10.0m^3, bud, active) 
+    abenv = peatlandAE(ele, soil, 1.0m^3, bud, active) 
     abenv.habitat.h1.matrix .*= tpi.data
-    abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 10.0m^3] .= 10.0m^3
+    abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 1.0m^3] .= 1.0m^3
 
     # If there are ditches, make sure they are lower than everything else around and filled with water
     if ditch
         file = "data/Ditches_full.tif"
         ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
         ditch_locations = findall(.!isnan.(ditches))
-        locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
-        abenv.habitat.h1.matrix[locs] .= 0.0m^3
-        abenv.habitat.h2.matrix[locs] .= 0
+        ditch_locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
+        abenv.habitat.h1.matrix[ditch_locs] .= 0.0m^3
+        abenv.habitat.h2.matrix[ditch_locs] .= 0
         abenv.active[ditch_locations] .= false
     else
-        ditch_locations = []
+        ditch_locs = []
     end
     # heatmap(ustrip.(abenv.habitat.h1.matrix)')
 
@@ -329,7 +329,8 @@ function runFuture(ditch::Bool = false; save = false, save_path = pwd())
     addtransition!(transitions, UpdateEnvironment(update_peat_environment!))
     active_squares = findall(active[1:end])
     peat_squares = findall(soil .== 11)
-    # Add in species based transitions
+    peat_locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in peat_squares]
+    # Add in species based transitions (only for active squares)
     for spp in eachindex(sppl.species.names) 
         for loc in active_squares
             addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
@@ -342,17 +343,26 @@ function runFuture(ditch::Bool = false; save = false, save_path = pwd())
         end
     end
     # Add in location based transitions and ditches
-    for loc in eachindex(abenv.habitat.h1.matrix)
-        # if loc ∈ ditch_locations
-        #     drainage = 1.0/month
-        # else
-            drainage = 0.001/month
-        # end
-        κ = 0.01/month
-        λ = 0.01/month
-
-        addtransition!(transitions, LateralFlow(loc, κ, λ))
-        addtransition!(transitions, WaterFlux(loc, drainage, 150.0m^3))
+    not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), ditch_locs)
+    for loc in ditch_locs
+        drainage = 1.0/month
+        κ = 1.0m^2/month
+        ν = 10.0m^2/month
+        addtransition!(transitions, LateralFlow(loc, κ, ν, 100.0m^3))
+        addtransition!(transitions, WaterFlux(loc, drainage, 100.0m^3))
+    end
+    for loc in not_drains
+        if loc ∈ peat_locs
+            drainage = 0.2/month
+            κ = 0.1m^2/month
+            ν = 1.0m^2/month
+        else
+            drainage = 0.5/month
+            κ = 1.0m^2/month
+            ν = 10.0m^2/month
+        end
+        addtransition!(transitions, LateralFlow(loc, κ, ν, 100.0m^3))
+        addtransition!(transitions, WaterFlux(loc, drainage, 100.0m^3))
     end
 
     transitions = specialise_transition_list(transitions)
@@ -379,7 +389,7 @@ end
 
 ## WITHOUT DITCHES ##
 abuns = runFuture();
-@save "/home/claireh/sdc/Peatland/Peatland_future_noditch.jld2" abuns=abuns[:, :, [12,end]]
+@save "/home/claireh/sdc/Peatland/Peatland_future_noditch_new.jld2" abuns=abuns[:, :, [12,end]]
 
 plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))
 for i in mosses
@@ -401,12 +411,12 @@ for i in trees
 end
 plot!(0:3/12:70, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
    colour = :black)
-Plots.pdf("Abuns_future.pdf")
+Plots.pdf("Abuns_future_new.pdf")
 
 
 ## WITH DITCHES ##
 abuns = runFuture(true);
-@save "/home/claireh/sdc/Peatland/Peatland_future_ditch.jld2" abuns=abuns[:, :, [12,end]]
+@save "/home/claireh/sdc/Peatland/Peatland_future_ditch_new.jld2" abuns=abuns[:, :, [12,end]]
 
 plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))
 for i in mosses
@@ -428,62 +438,62 @@ for i in trees
 end
 plot!(0:3/12:70, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
    colour = :black)
-Plots.pdf("Abuns_future_ditch.pdf")
+Plots.pdf("Abuns_future_ditch_new.pdf")
 
 
 # Plotting for paper
 # Heatmap for mosses
 heatmap(layout = (2,2), size = (1200, 1000), grid = false, aspect_ratio = 1, clim = (0, 600), titlelocation = :left,
 left_margin = 10*Plots.mm, guidefont = "Helvetica Bold", guidefontsize = 16, titlefontsize = 18)
-@load "data/Peatland_past_noditch.jld2"
+@load "data/Peatland_past_noditch_new.jld2"
 sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 1, c = :viridis,
 title = "A", xlab = "Without drainage", ylab = "2010 - 2020 (repeated)", guide_position = :top)
-@load "data/Peatland_past_ditch.jld2"
+@load "data/Peatland_past_ditch_new.jld2"
 sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 2, c = :viridis,
 title = "B", xlab = "With drainage", guide_position = :top)
-@load "data/Peatland_future_noditch.jld2"
+@load "data/Peatland_future_noditch_new.jld2"
 sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 3, c = :viridis,
 title = "C", ylab = "2010 - 2080")
-@load "data/Peatland_future_ditch.jld2"
+@load "data/Peatland_future_ditch_new.jld2"
 sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 4, c = :viridis,
 title = "D")
-Plots.pdf("plots/Mosses_total.pdf")
+Plots.pdf("plots/Mosses_total_new.pdf")
 
 # Heatmap for shrubs
 heatmap(layout = (2,2), size = (1200, 1000), grid = false, aspect_ratio = 1, clim = (0, 50), titlelocation = :left,
 left_margin = 10*Plots.mm, guidefont = "Helvetica Bold", guidefontsize = 16, titlefontsize = 18)
-@load "data/Peatland_past_noditch.jld2"
+@load "data/Peatland_past_noditch_new.jld2"
 sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 1, c = :viridis,
 title = "A", xlab = "Without drainage", ylab = "2010 - 2020 (repeated)", guide_position = :top)
-@load "data/Peatland_past_ditch.jld2"
+@load "data/Peatland_past_ditch_new.jld2"
 sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 2, c = :viridis,
 title = "B", xlab = "With drainage", guide_position = :top)
-@load "data/Peatland_future_noditch.jld2"
+@load "data/Peatland_future_noditch_new.jld2"
 sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 3, c = :viridis,
 title = "C", ylab = "2010 - 2080")
-@load "data/Peatland_future_ditch.jld2"
+@load "data/Peatland_future_ditch_new.jld2"
 sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 4, c = :viridis,
 title = "D")
-Plots.pdf("plots/Others_total.pdf")
+Plots.pdf("plots/Others_total_new.pdf")
 
 # Change over time
-@load "data/Peatland_future_noditch.jld2"
+@load "data/Peatland_future_noditch_new.jld2"
 sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 sumabuns2 = Float64.(reshape(sum(abuns[1:numMoss, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
@@ -499,5 +509,5 @@ sumabuns2[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, (sumabuns .- sumabuns2)', c = :delta, clim = (-60, 60),
 subplot = 2, aspect_ratio = 1, title = "B", titlelocation = :left,
 left_margin = 10*Plots.mm, guidefont = "Helvetica Bold", guidefontsize = 16, titlefontsize = 18)
-Plots.pdf("plots/Change.pdf")
+Plots.pdf("plots/Change_new.pdf")
 
