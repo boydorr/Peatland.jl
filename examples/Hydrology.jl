@@ -13,7 +13,9 @@ using CSV
 using Distances
 using Shapefile
 using Diversity
+using DataPipeline
 
+handle = DataPipeline.initialise()
 function buildEco(timestep::Unitful.Time; ditch = true)
     JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
     JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
@@ -81,7 +83,8 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     tpi = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     tpi.data[tpi.data .< 0] .= 0
 
-    @load "data/RainfallBudget_burnin.jld2"
+    path = link_read!(handle, "Peatland/processed_data/RainfallBurnin")
+    bud = WaterTimeBudget(JLD2.load(path, "bud"), 1)
     bud.matrix .*= (timestep / month)
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
@@ -135,9 +138,9 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     end
     # Add in location based transitions and ditches
     for loc in eachindex(abenv.habitat.h1.matrix)
-        if loc ∈ ditch_locs
+        if loc in ditch_locs
             drainage = 1.0/month
-        elseif loc ∈ river_locs
+        elseif loc in river_locs
             drainage = 1.0/month
         else
             drainage = 0.0001/month
@@ -145,9 +148,9 @@ function buildEco(timestep::Unitful.Time; ditch = true)
         infiltration = 0.2/month
         evaporation = 0.7/month
         κ = 0.001m^2/month
-        ν = 0.001m^2/month
+        v = 0.001m^2/month
 
-        addtransition!(transitions, LateralFlow(loc, κ, ν, 100.0m^3))
+        addtransition!(transitions, LateralFlow(loc, κ, v, 100.0m^3))
         addtransition!(transitions, WaterFlux(loc, drainage, infiltration, evaporation, 100.0m^3))
     end
 
@@ -163,9 +166,8 @@ for i in 1:10
     EcoSISTEM.update!(eco, timestep, eco.transitions)
     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
 end
-heatmap(ustrip.(eco.abenv.habitat.h1.matrix)')#, size = (1000, 600), layout = 2)
-# heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 10), subplot = 2)
-plot(envs)
-
-eco.abenv.habitat.h1.matrix[.!eco.abenv.active] .= NaN*m^3
-heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 20))
+heatmap(ustrip.(eco.abenv.habitat.h1.matrix)')
+path = link_write!(handle, "Hydrology")
+Plots.pdf(path)
+#plot(envs)
+DataPipeline.finalise(handle)

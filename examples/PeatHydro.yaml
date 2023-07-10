@@ -1,0 +1,13 @@
+run_metadata:
+  default_input_namespace: claireharris
+  description: Peatland Model julia
+  script: |
+    julia --project=examples -e "using Pkg; Pkg.instantiate()"
+    julia --project=examples examples/Hydrology.jl
+read:
+- data_product: Peatland/processed_data/RainfallBurnin
+  version: 0.0.2
+write:
+- data_product: Hydrology
+  description: Plot of peatland water levels
+  file_type: pdf

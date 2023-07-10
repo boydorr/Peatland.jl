@@ -9,4 +9,3 @@ write:
 - data_product: PeatlandTest
   description: Plot of peatland species abundance
   file_type: pdf
-  
