@@ -5,9 +5,9 @@ using EcoSISTEM.Units
 using Peatland
 using Unitful, Unitful.DefaultSymbols
 using Distributions
+using DataFrames
 using Plots
 using JLD2
-using DataFrames
 using Missings
 using CSV
 using Distances
@@ -55,10 +55,10 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(TruncatedNormal(20.0, 1.50, 0.0, Inf), numMoss) .* m^3 
-    pref2 = rand(TruncatedNormal(7.0, 1.50, 0.0, Inf), numShrub) .* m^3 
+    pref1 = rand(TruncatedNormal(0.4, 0.01, 0.0, 1.0), numMoss)
+    pref2 = rand(TruncatedNormal(0.3, 0.01, 0.0, 1.0), numShrub)
     opts = [pref1; pref2]
-    vars = [fill(1.0m^3, numMoss); fill(1.0m^3, numShrub)]
+    vars = [fill(0.01, numMoss); fill(0.01, numShrub)]
     water_traits = GaussTrait(opts, vars)
     ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
     soilDict = Dict("hygrophilous" => [8, 11], "terrestrial" => [1, 4, 5], "terrestrial/hygrophilous" => [1, 4, 5, 8, 11])
@@ -80,15 +80,14 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     file = "data/CF_TPI_smooth.tif"
     tpi = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     tpi.data[tpi.data .< 0] .= 0
+    tpi.data ./= maximum(tpi.data)
 
     @load "data/RainfallBudget_burnin.jld2"
     bud.matrix .*= (timestep / month)
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
-    abenv = peatlandAE(ele, soil, 1.0m^3, bud, active) 
-    abenv.habitat.h1.matrix .*= tpi.data
-    abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 1.0m^3] .= 1.0m^3
+    abenv = peatlandAE(tpi, ele, soil, bud, active)
 
     # If there are ditches, make sure they are lower than everything else around and filled with water
     if ditch
@@ -113,7 +112,7 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     # heatmap(ustrip.(abenv.habitat.h1.matrix)')
 
     # Set relationship between species and environment (gaussian)
-    rel = multiplicativeTR3(Gauss{typeof(1.0m^3)}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
+    rel = multiplicativeTR3(Gauss{Float64}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
 
     # Create new transition list
     transitions = TransitionList(true)
@@ -128,35 +127,38 @@ function buildEco(timestep::Unitful.Time; ditch = true)
             addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
             addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
             addtransition!(transitions, SeedDisperse(spp, loc))
-            addtransition!(transitions, WaterUse(spp, loc, 0.01))
+            addtransition!(transitions, WaterUse(spp, loc, 0.1/m^3))
             if spp > numMoss
                 addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
             end
         end
     end
-    # Add in location based transitions and ditches
+    # # Add in location based transitions and ditches
     drains = [ditch_locs; river_locs ...]
     not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
     for loc in drains
         drainage = 1.0/month
-        κ = 1.0m^2/month
-        ν = 10.0m^2/month
-        addtransition!(transitions, LateralFlow(loc, κ, ν, 20.0m^3))
-        addtransition!(transitions, WaterFlux(loc, drainage, 20.0m^3))
+        κ = 100*30.0m^2/month
+        ν = 100*30.0m^2/month
+        addtransition!(transitions, LateralFlow(loc, κ, ν))
+        addtransition!(transitions, Drainage(loc, drainage))
     end
     for loc in not_drains
         if loc ∈ peat_locs
-            drainage = 0.2/month
-            κ = 0.1m^2/month
-            ν = 1.0m^2/month
+            κ = 100*30.0m^2/month
+            ν = 100*30.0m^2/month
+            fmax = 4.0/month
+            kₛ = 1e-4/m^3
         else
-            drainage = 0.5/month
-            κ = 1.0m^2/month
-            ν = 10.0m^2/month
+            κ = 100*30.0m^2/month
+            ν = 100*30.0m^2/month
+            fmax = 4.0/month
+            kₛ = 1e-4/m^3
         end
-        addtransition!(transitions, LateralFlow(loc, κ, ν, 100.0m^3))
-        addtransition!(transitions, WaterFlux(loc, drainage, 100.0m^3))
+        addtransition!(transitions, LateralFlow(loc, κ, ν))
+        addtransition!(transitions, WaterFlux(loc, fmax, kₛ))
     end
+
 
     transitions = specialise_transition_list(transitions)
     # Create ecosystem
@@ -165,14 +167,24 @@ function buildEco(timestep::Unitful.Time; ditch = true)
 end
 timestep = 1month
 eco = buildEco(timestep, ditch = false)
+envs = zeros(100)
+for i in 1:100
+    EcoSISTEM.update!(eco, timestep, eco.transitions)
+    envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
+end
+heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
+heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 100), subplot = 2)
+plot(envs)
+
+abuns = reshape(sum(eco.abundances.matrix, dims = 1), size(active))
+heatmap(abuns')
+
+eco = buildEco(timestep, ditch = true)
 envs = zeros(20)
 for i in 1:20
     EcoSISTEM.update!(eco, timestep, eco.transitions)
     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
 end
-heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 50)) #, size = (1000, 600), layout = 2)
-# heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 10), subplot = 2)
+heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
+heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 100), subplot = 2)
 plot(envs)
-
-eco.abenv.habitat.h1.matrix[.!eco.abenv.active] .= NaN*m^3
-heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 20))
