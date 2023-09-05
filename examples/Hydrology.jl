@@ -17,13 +17,16 @@ using DataPipeline
 
 handle = DataPipeline.initialise()
 function buildEco(timestep::Unitful.Time; ditch = true)
-    JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
-    JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
+    path = link_read!(handle, "PeatModel/Peat30spp")
+    JLD2.@load(path, peat_spp)
+    println(peat_spp)
+    path = link_read!(handle, "PeatModel/Moss30spp")
+    JLD2.@load(path, moss_spp)
 
     moss_spp = filter(f -> (f.Len == findmax(moss_spp.Len)[1]) || (f.Len == findmin(moss_spp.Len)[1]), moss_spp)
     peat_spp = filter(f -> (f.Plant_height == findmax(peat_spp.Plant_height)[1]) || (f.Plant_height == findmin(peat_spp.Plant_height)[1]), peat_spp)
 
-    file = "data/CF_outline.tif"
+    file = link_read!(handle, "PeatModel/Outline")
     cf = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     active = Array(.!isnan.(Array(cf)))
     #heatmap(active)
@@ -75,18 +78,18 @@ function buildEco(timestep::Unitful.Time; ditch = true)
         movement, param, native)
 
     # Create abiotic environment - even grid of one temperature
-    file = "data/CF_elevation_smooth.tif"
+    file = link_read!(handle, "PeatModel/Elevation")
     ele = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     ele.data[ele.data .< 0] .= 0
 
-    file = "data/CF_TPI_smooth.tif"
+    file = link_read!(handle, "PeatModel/TPI")
     tpi = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     tpi.data[tpi.data .< 0] .= 0
 
-    path = link_read!(handle, "Peatland/processed_data/RainfallBurnin")
+    path = link_read!(handle, "PeatModel/RainfallBurnin")
     bud = WaterTimeBudget(JLD2.load(path, "bud"), 1)
     bud.matrix .*= (timestep / month)
-    file = "data/LCM.tif"
+    file = link_read!(handle, "PeatModel/LCM")
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
     abenv = peatlandAE(ele, soil, 1.0m^3, bud, active) 
@@ -95,11 +98,11 @@ function buildEco(timestep::Unitful.Time; ditch = true)
 
     # If there are ditches, make sure they are lower than everything else around and filled with water
     if ditch
-        file = "data/Ditches_full.tif"
+        file = link_read!(handle, "PeatModel/Ditches")
         ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
         ditch_locations = findall(.!isnan.(ditches))
         ditch_locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
-        file = "data/MainRivers.tif"
+        file = link_read!(handle, "PeatModel/Rivers")
         rivers = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
         river_locations = findall(.!isnan.(rivers))
         river_locs = [convert_coords(r[1], r[2], size(cf, 1)) for r in river_locations]
@@ -117,7 +120,7 @@ function buildEco(timestep::Unitful.Time; ditch = true)
 
     # Set relationship between species and environment (gaussian)
     rel = multiplicativeTR3(Gauss{typeof(1.0m^3)}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
-
+    
     # Create new transition list
     transitions = TransitionList(true)
     addtransition!(transitions, UpdateEnergy(update_energy_usage!))
@@ -138,22 +141,12 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     end
     # Add in location based transitions and ditches
     for loc in eachindex(abenv.habitat.h1.matrix)
-        if loc in ditch_locs
-            drainage = 1.0/month
-        elseif loc in river_locs
-            drainage = 1.0/month
-        else
-            drainage = 0.0001/month
-        end
-        infiltration = 0.2/month
-        evaporation = 0.7/month
-        κ = 0.001m^2/month
-        v = 0.001m^2/month
-
-        addtransition!(transitions, LateralFlow(loc, κ, v, 100.0m^3))
-        addtransition!(transitions, WaterFlux(loc, drainage, infiltration, evaporation, 100.0m^3))
+        drainage = 0.001/month
+        k = 0.001/month
+        v = 0.001/month
+        addtransition!(transitions, LateralFlow(loc, k, v))
+        addtransition!(transitions, WaterFlux(loc, drainage, 100.0m^3))
     end
-
     transitions = specialise_transition_list(transitions)
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
