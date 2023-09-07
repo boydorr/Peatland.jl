@@ -101,7 +101,7 @@ function buildEco(timestep::Unitful.Time; ditch = true)
         river_locs = [convert_coords(r[1], r[2], size(cf, 1)) for r in river_locations]
         locs = [ditch_locs; river_locs ...]
         # locs = ditch_locs
-        abenv.habitat.h1.matrix[locs] .= 0.0m^3
+        abenv.habitat.h1.matrix[locs] .= 0.0
         abenv.habitat.h2.matrix[locs] .= 0
         abenv.active[ditch_locations] .= false
         abenv.active[river_locations] .= false
@@ -127,12 +127,18 @@ function buildEco(timestep::Unitful.Time; ditch = true)
             addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
             addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
             addtransition!(transitions, SeedDisperse(spp, loc))
-            addtransition!(transitions, WaterUse(spp, loc, 0.1/m^3))
             if spp > numMoss
                 addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
             end
         end
     end
+    # Water needs to be used everywhere (with a background rate for where we aren't modelling plants)
+    for spp in eachindex(sppl.species.names) 
+        for loc in eachindex(abenv.habitat.h1.matrix)
+            addtransition!(transitions, WaterUse(spp, loc, 0.02, 0.001))
+        end
+    end
+
     # # Add in location based transitions and ditches
     drains = [ditch_locs; river_locs ...]
     not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
@@ -145,18 +151,20 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     end
     for loc in not_drains
         if loc ∈ peat_locs
-            κ = 100*30.0m^2/month
-            ν = 100*30.0m^2/month
-            fmax = 4.0/month
-            kₛ = 1e-4/m^3
+            κ = 100.0m^2/month
+            ν = 100.0m^2/month
+            fmax = 1.0/month
+            kₛ = 3e-4/m^3
+            ϵ = 1.0m^3
         else
-            κ = 100*30.0m^2/month
-            ν = 100*30.0m^2/month
-            fmax = 4.0/month
-            kₛ = 1e-4/m^3
+            κ = 100.0m^2/month
+            ν = 100.0m^2/month
+            fmax = 1.0/month
+            kₛ = 2e-4/m^3
+            ϵ = 1.0m^3
         end
         addtransition!(transitions, LateralFlow(loc, κ, ν))
-        addtransition!(transitions, WaterFlux(loc, fmax, kₛ))
+        addtransition!(transitions, WaterFlux(loc, fmax, kₛ, ϵ))
     end
 
 
@@ -173,11 +181,16 @@ for i in 1:100
     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
 end
 heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
-heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 100), subplot = 2)
-plot(envs)
+heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 10), subplot = 2)
+plot(envs, ylim= (0,1))
 
 abuns = reshape(sum(eco.abundances.matrix, dims = 1), size(active))
 heatmap(abuns')
+
+abuns_m = reshape(sum(eco.abundances.matrix[mosses, :], dims = 1)[1, :], size(active))
+heatmap(abuns_m')
+abuns_s = reshape(sum(eco.abundances.matrix[shrubs, :], dims = 1)[1, :], size(active))
+heatmap(abuns_s')
 
 eco = buildEco(timestep, ditch = true)
 envs = zeros(20)
