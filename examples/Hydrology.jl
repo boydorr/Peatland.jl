@@ -94,11 +94,11 @@ function buildEco(timestep::Unitful.Time; ditch = true)
         file = "data/Ditches_full.tif"
         ditches = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
         ditch_locations = findall(.!isnan.(ditches))
-        ditch_locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in ditch_locations]
+        ditch_locs = [convert_coords(d[1], d[2], size(active, 1)) for d in ditch_locations]
         file = "data/MainRivers.tif"
         rivers = readfile(file, 289000.0m, 293000.0m, 261000.0m, 266000.0m)
         river_locations = findall(.!isnan.(rivers))
-        river_locs = [convert_coords(r[1], r[2], size(cf, 1)) for r in river_locations]
+        river_locs = [convert_coords(r[1], r[2], size(active, 1)) for r in river_locations]
         locs = [ditch_locs; river_locs ...]
         # locs = ditch_locs
         abenv.habitat.h1.matrix[locs] .= 0.0
@@ -144,9 +144,9 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
     for loc in drains
         drainage = 1.0/month
-        κ = 100*30.0m^2/month
-        ν = 100*30.0m^2/month
-        addtransition!(transitions, LateralFlow(loc, κ, ν))
+        κ = 100.0m^2/month
+        ν = 100.0m^2/month
+        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
         addtransition!(transitions, Drainage(loc, drainage))
     end
     for loc in not_drains
@@ -154,16 +154,16 @@ function buildEco(timestep::Unitful.Time; ditch = true)
             κ = 100.0m^2/month
             ν = 100.0m^2/month
             fmax = 1.0/month
-            kₛ = 3e-4/m^3
+            kₛ = 5e-4/m^3
             ϵ = 1.0m^3
         else
             κ = 100.0m^2/month
             ν = 100.0m^2/month
             fmax = 1.0/month
-            kₛ = 2e-4/m^3
+            kₛ = 5e-4/m^3
             ϵ = 1.0m^3
         end
-        addtransition!(transitions, LateralFlow(loc, κ, ν))
+        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
         addtransition!(transitions, WaterFlux(loc, fmax, kₛ, ϵ))
     end
 
@@ -174,27 +174,27 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     return eco
 end
 timestep = 1month
-eco = buildEco(timestep, ditch = false)
-envs = zeros(100)
-for i in 1:100
-    EcoSISTEM.update!(eco, timestep, eco.transitions)
-    envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
-end
-heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
-heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 10), subplot = 2)
-plot(envs, ylim= (0,1))
+# eco = buildEco(timestep, ditch = false)
+# envs = zeros(100)
+# for i in 1:100
+#     EcoSISTEM.update!(eco, timestep, eco.transitions)
+#     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
+# end
+# heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
+# heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 10), subplot = 2)
+# plot(envs, ylim= (0,1))
 
-abuns = reshape(sum(eco.abundances.matrix, dims = 1), size(active))
-heatmap(abuns')
+# abuns = reshape(sum(eco.abundances.matrix, dims = 1), size(active))
+# heatmap(abuns')
 
-abuns_m = reshape(sum(eco.abundances.matrix[mosses, :], dims = 1)[1, :], size(active))
-heatmap(abuns_m')
-abuns_s = reshape(sum(eco.abundances.matrix[shrubs, :], dims = 1)[1, :], size(active))
-heatmap(abuns_s')
+# abuns_m = reshape(sum(eco.abundances.matrix[mosses, :], dims = 1)[1, :], size(active))
+# heatmap(abuns_m')
+# abuns_s = reshape(sum(eco.abundances.matrix[shrubs, :], dims = 1)[1, :], size(active))
+# heatmap(abuns_s')
 
 eco = buildEco(timestep, ditch = true)
-envs = zeros(20)
-for i in 1:20
+envs = zeros(100)
+for i in 1:100
     EcoSISTEM.update!(eco, timestep, eco.transitions)
     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
 end
