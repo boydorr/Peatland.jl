@@ -11,7 +11,6 @@ using JLD2
 using Missings
 using CSV
 using Distances
-using Shapefile
 using Diversity
 
 function buildEco(timestep::Unitful.Time; ditch = true)
@@ -37,8 +36,8 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     moss_height = moss_spp[!, :Len] .* mm
 
     #Set up how much energy each species consumes
-    req1 = moss_height .* rand(Normal(1, 0.1), numMoss) .* mm ./m
-    req2 = height .* rand(Normal(10.0, 0.1), numShrub) .* mm ./m
+    req1 = moss_height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numMoss) .* mm ./m
+    req2 = height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numShrub) .* mm ./m
     energy_vec = WaterRequirement([req1; req2])
 
     # Set rates for birth and death
@@ -55,10 +54,10 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(TruncatedNormal(0.4, 0.01, 0.0, 1.0), numMoss)
-    pref2 = rand(TruncatedNormal(0.3, 0.01, 0.0, 1.0), numShrub)
+    pref1 = rand(TruncatedNormal(0.5, 0.05, 0.0, 1.0), numMoss)
+    pref2 = rand(TruncatedNormal(0.3, 0.05, 0.0, 1.0), numShrub)
     opts = [pref1; pref2]
-    vars = [fill(0.01, numMoss); fill(0.01, numShrub)]
+    vars = [fill(0.05, numMoss); fill(0.05, numShrub)]
     water_traits = GaussTrait(opts, vars)
     ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
     soilDict = Dict("hygrophilous" => [8, 11], "terrestrial" => [1, 4, 5], "terrestrial/hygrophilous" => [1, 4, 5, 8, 11])
@@ -135,7 +134,7 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     # Water needs to be used everywhere (with a background rate for where we aren't modelling plants)
     for spp in eachindex(sppl.species.names) 
         for loc in eachindex(abenv.habitat.h1.matrix)
-            addtransition!(transitions, WaterUse(spp, loc, 0.02, 0.001))
+            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.005, 1/1000.0mm))
         end
     end
 
@@ -144,29 +143,28 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
     for loc in drains
         drainage = 1.0/month
-        κ = 100.0m^2/month
-        ν = 100.0m^2/month
+        κ = 10 * 30.0m^2/month
+        ν = 10 * 30.0m^2/month
         addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
         addtransition!(transitions, Drainage(loc, drainage))
     end
     for loc in not_drains
         if loc ∈ peat_locs
-            κ = 100.0m^2/month
-            ν = 100.0m^2/month
-            fmax = 1.0/month
-            kₛ = 5e-4/m^3
+            κ = 10*30.0m^2/month
+            ν = 10*30.0m^2/month
+            fmax = 3.0/month
+            kₛ = 0.01/100mm
             ϵ = 1.0m^3
         else
-            κ = 100.0m^2/month
-            ν = 100.0m^2/month
-            fmax = 1.0/month
-            kₛ = 5e-4/m^3
+            κ = 10*30.0m^2/month
+            ν = 10*30.0m^2/month
+            fmax = 3.0/month
+            kₛ = 0.01/100mm
             ϵ = 1.0m^3
         end
         addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
         addtransition!(transitions, WaterFlux(loc, fmax, kₛ, ϵ))
     end
-
 
     transitions = specialise_transition_list(transitions)
     # Create ecosystem
@@ -174,27 +172,27 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     return eco
 end
 timestep = 1month
-# eco = buildEco(timestep, ditch = false)
-# envs = zeros(100)
-# for i in 1:100
-#     EcoSISTEM.update!(eco, timestep, eco.transitions)
-#     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
-# end
-# heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
-# heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 10), subplot = 2)
-# plot(envs, ylim= (0,1))
+eco = buildEco(timestep, ditch = false)
+envs = zeros(120)
+for i in 1:120
+    EcoSISTEM.update!(eco, timestep, eco.transitions)
+    envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
+end
+heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
+heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 10), subplot = 2)
+plot(envs, ylim= (0,1))
 
-# abuns = reshape(sum(eco.abundances.matrix, dims = 1), size(active))
-# heatmap(abuns')
+abuns = reshape(sum(eco.abundances.matrix, dims = 1), size(active))
+heatmap(abuns')
 
-# abuns_m = reshape(sum(eco.abundances.matrix[mosses, :], dims = 1)[1, :], size(active))
-# heatmap(abuns_m')
-# abuns_s = reshape(sum(eco.abundances.matrix[shrubs, :], dims = 1)[1, :], size(active))
-# heatmap(abuns_s')
+abuns_m = reshape(sum(eco.abundances.matrix[mosses, :], dims = 1)[1, :], size(active))
+heatmap(abuns_m')
+abuns_s = reshape(sum(eco.abundances.matrix[shrubs, :], dims = 1)[1, :], size(active))
+heatmap(abuns_s')
 
 eco = buildEco(timestep, ditch = true)
-envs = zeros(100)
-for i in 1:100
+envs = zeros(120)
+for i in 1:120
     EcoSISTEM.update!(eco, timestep, eco.transitions)
     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
 end

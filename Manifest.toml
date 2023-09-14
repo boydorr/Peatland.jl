@@ -226,12 +226,6 @@ git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
 uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
 version = "4.1.1"
 
-[[DBFTables]]
-deps = ["Dates", "Printf", "Tables", "WeakRefStrings"]
-git-tree-sha1 = "757566386ae57e3276e7a867df55461e27131a7d"
-uuid = "75c7ada1-017a-5fb6-b8c7-2125ff2d6c93"
-version = "1.2.3"
-
 [[DataAPI]]
 git-tree-sha1 = "8da84edb865b0b5b0100c0666a9bc9a0b71c553c"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
@@ -1261,12 +1255,6 @@ version = "1.4.0"
 
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
-
-[[Shapefile]]
-deps = ["DBFTables", "GeoInterface", "RecipesBase", "Tables"]
-git-tree-sha1 = "213498e68fe72d9a62668d58d6be3bc423ebb81f"
-uuid = "8e980c4a-a4fe-5da2-b3a7-4b4b0353a2f4"
-version = "0.7.4"
 
 [[SharedArrays]]
 deps = ["Distributed", "Mmap", "Random", "Serialization"]

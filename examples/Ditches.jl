@@ -1,4 +1,4 @@
-using Revise
+# using Revise
 using EcoSISTEM
 using EcoSISTEM.ClimatePref
 using EcoSISTEM.Units
@@ -11,11 +11,11 @@ using DataFrames
 using Missings
 using CSV
 using Distances
-using Shapefile
 using Diversity
 
 ### HISTORIC RAINFALL DATA 2010 - 2020 (REPEATED) ###
-function runPast(ditch = false; save = false, save_path = pwd())
+function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path = pwd())
+
     JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
     JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
 
@@ -35,8 +35,8 @@ function runPast(ditch = false; save = false, save_path = pwd())
     moss_height = moss_spp[!, :Len] .* mm
 
     #Set up how much energy each species consumes
-    req1 = moss_height .* rand(Normal(1.0, 0.1), numMoss) .* mm ./m
-    req2 = height .* rand(Normal(10.0, 0.1), numShrub) .* mm ./m
+    req1 = moss_height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numMoss) .* mm ./m
+    req2 = height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numShrub) .* mm ./m
     energy_vec = WaterRequirement([req1; req2])
 
     # Set rates for birth and death
@@ -53,10 +53,10 @@ function runPast(ditch = false; save = false, save_path = pwd())
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(TruncatedNormal(0.4, 0.01, 0.0, 1.0), numMoss)
-    pref2 = rand(TruncatedNormal(0.3, 0.01, 0.0, 1.0), numShrub)
+    pref1 = rand(TruncatedNormal(0.5, 0.05, 0.0, 1.0), numMoss)
+    pref2 = rand(TruncatedNormal(0.3, 0.05, 0.0, 1.0), numShrub)
     opts = [pref1; pref2]
-    vars = [fill(0.01, numMoss); fill(0.01, numShrub)]
+    vars = [fill(0.05, numMoss); fill(0.05, numShrub)]
     water_traits = GaussTrait(opts, vars)
     ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
     soilDict = Dict("hygrophilous" => [8, 11], "terrestrial" => [1, 4, 5], "terrestrial/hygrophilous" => [1, 4, 5, 8, 11])
@@ -133,7 +133,7 @@ function runPast(ditch = false; save = false, save_path = pwd())
     # Water needs to be used everywhere (with a background rate for where we aren't modelling plants)
     for spp in eachindex(sppl.species.names) 
         for loc in eachindex(abenv.habitat.h1.matrix)
-            addtransition!(transitions, WaterUse(spp, loc, 0.02, 0.001))
+            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.005, 1/1000.0mm))
         end
     end
 
@@ -142,23 +142,23 @@ function runPast(ditch = false; save = false, save_path = pwd())
     not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
     for loc in drains
         drainage = 1.0/month
-        κ = 100.0m^2/month
-        ν = 100.0m^2/month
+        κ = 10 * 30.0m^2/month
+        ν = 10 * 30.0m^2/month
         addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
         addtransition!(transitions, Drainage(loc, drainage))
     end
     for loc in not_drains
         if loc ∈ peat_locs
-            κ = 100.0m^2/month
-            ν = 100.0m^2/month
-            fmax = 1.0/month
-            kₛ = 5e-4/m^3
+            κ = 10*30.0m^2/month
+            ν = 10*30.0m^2/month
+            fmax = 3.0/month
+            kₛ = 0.01/100mm
             ϵ = 1.0m^3
         else
-            κ = 100.0m^2/month
-            ν = 100.0m^2/month
-            fmax = 1.0/month
-            kₛ = 5e-4/m^3
+            κ = 10*30.0m^2/month
+            ν = 10*30.0m^2/month
+            fmax = 3.0/month
+            kₛ = 0.01/100mm
             ϵ = 1.0m^3
         end
         addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
@@ -169,27 +169,9 @@ function runPast(ditch = false; save = false, save_path = pwd())
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
 
-    # envs = zeros(10)
-    # for i in 1:10
-    #     EcoSISTEM.update!(eco, timestep, transitions)
-    #     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
-    # end
-    # heatmap(ustrip.(eco.abenv.habitat.h1.matrix)')
-    #plot(envs)
-
-    # hab = ustrip.(eco.abenv.habitat.h1.matrix)
-    # #hab[.!active] .= NaN
-    # heatmap(hab', clim = (0, 100))
-    # Plots.pdf("plots/Hab.pdf")
-
-    # hab = ustrip.(eco.abenv.habitat.h2.matrix)
-    # hab[.!active] .= NaN
-    # heatmap(hab)
-    # Plots.pdf("plots/Ele.pdf")
-
     # Run simulation
     # Simulation Parameters
-    burnin = 30year; times = 70year; timestep = 1month;
+    burnin = 30year; times = 70year; 
     record_interval = 3months
     lensim = length(0years:record_interval:times)
     # Burnin
@@ -200,7 +182,8 @@ function runPast(ditch = false; save = false, save_path = pwd())
 end
 
 ## WITHOUT DITCHES ##
-abuns = runPast();
+timestep = 1month
+abuns = runPast(timestep);
 @save "/home/claireh/sdc/Peatland/Peatland_past_noditch_new.jld2" abuns=abuns[:, :, [12,end]]
 
 plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))
