@@ -71,7 +71,7 @@ end
 
   eco.cache.surfacewater .+= eco.cache.surfacemigration
   eco.cache.surfacewater[eco.cache.surfacewater .< 0mm] .= 0mm
-  println(mean(eco.cache.surfacewater))
+  # println(mean(eco.cache.surfacewater))
 
   update_ghostcells!(eco.abenv.habitat.h1.matrix)
 
