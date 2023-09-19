@@ -55,9 +55,9 @@ function buildEco(timestep::Unitful.Time; ditch = true)
 
     # Create species list, including their temperature preferences, seed abundance and native status
     pref1 = rand(TruncatedNormal(0.5, 0.05, 0.0, 1.0), numMoss)
-    pref2 = rand(TruncatedNormal(0.3, 0.05, 0.0, 1.0), numShrub)
+    pref2 = rand(TruncatedNormal(0.3, 0.01, 0.0, 1.0), numShrub)
     opts = [pref1; pref2]
-    vars = [fill(0.05, numMoss); fill(0.05, numShrub)]
+    vars = [fill(0.05, numMoss); fill(0.1, numShrub)]
     water_traits = GaussTrait(opts, vars)
     ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
     soilDict = Dict("hygrophilous" => [8, 11], "terrestrial" => [1, 4, 5], "terrestrial/hygrophilous" => [1, 4, 5, 8, 11])
@@ -126,15 +126,15 @@ function buildEco(timestep::Unitful.Time; ditch = true)
             addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
             addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
             addtransition!(transitions, SeedDisperse(spp, loc))
-            if spp > numMoss
+            # if spp > numMoss
                 addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
-            end
+            # end
         end
     end
     # Water needs to be used everywhere (with a background rate for where we aren't modelling plants)
     for spp in eachindex(sppl.species.names) 
         for loc in eachindex(abenv.habitat.h1.matrix)
-            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.005, 1/1000.0mm))
+            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.02, 0.33/1000.0mm))
         end
     end
 
@@ -152,18 +152,20 @@ function buildEco(timestep::Unitful.Time; ditch = true)
         if loc ∈ peat_locs
             κ = 10*30.0m^2/month
             ν = 10*30.0m^2/month
-            fmax = 3.0/month
-            kₛ = 0.01/100mm
-            ϵ = 1.0m^3
+            fmax = 6.0/month
+            kₛ = 0.03/100mm
+            W0 = 0.5
+            k2 = 5.0
         else
             κ = 10*30.0m^2/month
             ν = 10*30.0m^2/month
-            fmax = 3.0/month
-            kₛ = 0.01/100mm
-            ϵ = 1.0m^3
+            fmax = 6.0/month
+            kₛ = 0.03/100mm
+            W0 = 0.5
+            k2 = 5.0
         end
         addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
-        addtransition!(transitions, WaterFlux(loc, fmax, kₛ, ϵ))
+        addtransition!(transitions, WaterFlux(loc, fmax, kₛ, W0, k2))
     end
 
     transitions = specialise_transition_list(transitions)

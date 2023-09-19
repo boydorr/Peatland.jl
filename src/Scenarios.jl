@@ -71,10 +71,11 @@ mutable struct WaterFlux <: AbstractSetUp
     location::Int64
     fmax::DayType
     uptake_rate::InvLenType
-    evaporation::VolType
-    function WaterFlux(location::Int64, fmax::T, uptake_rate::InvLenType, evaporation::VolType) where T
+    W0::Float64
+    k2::Float64
+    function WaterFlux(location::Int64, fmax::T, uptake_rate::InvLenType, W0::Float64, k2::Float64) where T
         fmaxnew = uconvert(unit(DayType), fmax)
-        new(location, fmaxnew, uptake_rate, evaporation)
+        new(location, fmaxnew, uptake_rate, W0, k2)
     end
 end
 
@@ -83,24 +84,27 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, ti
     x,y = convert_coords(loc, size(eco.abenv.habitat, 1))
     bud = eco.abenv.budget.matrix[x, y, eco.abenv.budget.time]
     hab = eco.abenv.habitat.h1.matrix[loc]
+    abun = sum(eco.abundances.matrix[:, loc])
+    W0 = rule.W0
+    k2 = rule.k2
     eco.cache.surfacewater[loc] += bud
-    infiltration = rule.fmax * (1 - hab) * timestep * eco.cache.surfacewater[loc]
+    infiltration = rule.fmax * (1 - hab) * timestep * eco.cache.surfacewater[loc] * (abun + W0 * k2)/(abun + k2)
     eco.cache.surfacewater[loc] = max(zero(typeof(infiltration)), eco.cache.surfacewater[loc] - infiltration)
     eco.abenv.habitat.h1.matrix[loc] += infiltration * rule.uptake_rate
-    # eco.cache.surfacewater[loc] = min(rule.evaporation, eco.cache.surfacewater[loc])
 end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterFlux, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
     loc = rule.location
-    area = getgridsize(eco)^2
-    bud = eco.abenv.budget.matrix[loc]
+    x,y = convert_coords(loc, size(eco.abenv.habitat, 1))
+    bud = eco.abenv.budget.matrix[x, y, eco.abenv.budget.time]
     hab = eco.abenv.habitat.matrix[loc]
-    rainfall = bud * area
-    eco.cache.surfacewater[loc] += rainfall
-    infiltration = rule.fmax * (1 - hab) * timestep * eco.cache.surfacewater[loc]
+    abun = sum(eco.abundances.matrix[:, loc])
+    W0 = rule.W0
+    k2 = rule.k2
+    eco.cache.surfacewater[loc] += bud
+    infiltration = rule.fmax * (1 - hab) * timestep * eco.cache.surfacewater[loc] * (abun + W0 * k2)/(abun + k2)
     eco.cache.surfacewater[loc] = max(zero(typeof(infiltration)), eco.cache.surfacewater[loc] - infiltration)
     eco.abenv.habitat.matrix[loc] += infiltration * rule.uptake_rate
-    eco.cache.surfacewater[loc] = min(rule.evaporation, eco.cache.surfacewater[loc])
 end
 
 """
@@ -200,7 +204,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, tim
     if abun == 0
         uptake_rate = rule.background_infil
     end
-    water_use = rule.soil_moisture_frac * uptake_rate * hab 
+    water_use = rule.soil_moisture_frac * uptake_rate * hab
     eco.abenv.habitat.h1.matrix[loc] = max(zero(typeof(water_use)), hab - water_use) 
 end
 
@@ -209,15 +213,12 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, tim
     loc = rule.location
     hab = eco.abenv.habitat.matrix[loc]
     abun = eco.abundances.matrix[spp, loc]
-    active = eco.abenv.active[loc]
     water_needs = eco.spplist.species.requirement.energy[spp]
-    bud = eco.abenv.budget.matrix[loc]
-    uptake_rate = rule.soil_moisture_frac * water_needs/bud
-    if active
-        water_use = uptake_rate * abun * hab
-    else
-        water_use = rule.background_infil * hab
+    uptake_rate = abun  * water_needs * rule.scaling
+    if abun == 0
+        uptake_rate = rule.background_infil
     end
+    water_use = rule.soil_moisture_frac * uptake_rate * hab
     eco.abenv.habitat.matrix[loc] = max(zero(typeof(water_use)), hab - water_use) 
 end
 
