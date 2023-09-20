@@ -200,7 +200,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, tim
     hab = eco.abenv.habitat.h1.matrix[loc]
     abun = eco.abundances.matrix[spp, loc]
     water_needs = eco.spplist.species.requirement.energy[spp]
-    uptake_rate = abun  * water_needs * rule.scaling
+    uptake_rate = abun^eco.spplist.params.longevity  * water_needs * rule.scaling
     if abun == 0
         uptake_rate = rule.background_infil
     end
@@ -214,7 +214,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::WaterUse, tim
     hab = eco.abenv.habitat.matrix[loc]
     abun = eco.abundances.matrix[spp, loc]
     water_needs = eco.spplist.species.requirement.energy[spp]
-    uptake_rate = abun  * water_needs * rule.scaling
+    uptake_rate = abun^eco.spplist.params.longevity  * water_needs * rule.scaling
     if abun == 0
         uptake_rate = rule.background_infil
     end
