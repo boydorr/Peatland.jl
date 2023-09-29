@@ -276,7 +276,7 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, 
             #update_ghostcells!(eco.abenv.habitat.h1.matrix)
             diffusion_x = (eco.abenv.habitat.h1.matrix[plusx, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[minusx, y]) / gs^2
             diffusion_y = (eco.abenv.habitat.h1.matrix[x, plusy] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, minusy]) / gs^2
-            diffusion = rule.κ/10.0 * timestep * (diffusion_x + diffusion_y)
+            diffusion = rule.κ/50.0 * timestep * (diffusion_x + diffusion_y)
             eco.cache.watermigration[loc] += diffusion
         end
     #end
