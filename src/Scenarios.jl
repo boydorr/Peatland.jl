@@ -272,13 +272,13 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, 
 
         eco.cache.surfacemigration[loc] += diffusion + advection 
 
-        if rule.ditch 
-            #update_ghostcells!(eco.abenv.habitat.h1.matrix)
-            diffusion_x = (eco.abenv.habitat.h1.matrix[plusx, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[minusx, y]) / gs^2
-            diffusion_y = (eco.abenv.habitat.h1.matrix[x, plusy] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, minusy]) / gs^2
-            diffusion = rule.κ/50.0 * timestep * (diffusion_x + diffusion_y)
-            eco.cache.watermigration[loc] += diffusion
-        end
+        # if rule.ditch 
+        #     #update_ghostcells!(eco.abenv.habitat.h1.matrix)
+        #     diffusion_x = (eco.abenv.habitat.h1.matrix[plusx, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[minusx, y]) / gs^2
+        #     diffusion_y = (eco.abenv.habitat.h1.matrix[x, plusy] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, minusy]) / gs^2
+        #     diffusion = rule.κ/100.0 * timestep * (diffusion_x + diffusion_y)
+        #     eco.cache.watermigration[loc] += diffusion
+        # end
     #end
 end
 
@@ -342,19 +342,19 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Drainage, tim
     drainage = rule.drainage * timestep * hab
     eco.abenv.habitat.h1.matrix[loc] = max(zero(typeof(drainage)), hab - drainage)
 
-    # x, y = convert_coords(loc, size(eco.abenv.habitat, 1))
-    # gs = getgridsize(eco)
-    # maxX = size(eco.abenv.habitat.h1, 1)
-    # maxY = size(eco.abenv.habitat.h1, 2)
-    # if (x > 1) && (x < maxX) && (y > 1) && (y < maxY)
-    #     update_ghostcells!(eco.abenv.habitat.h1.matrix)
-    #     diffusion_x = (eco.abenv.habitat.h1.matrix[x + 1, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x - 1, y]) / gs^2
-    #     diffusion_y = (eco.abenv.habitat.h1.matrix[x, y + 1] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, y - 1]) / gs^2
-    #     diffusion = 10.0m^2/month * timestep * (diffusion_x + diffusion_y)
-    #     eco.abenv.habitat.h1.matrix[loc] += diffusion
-    #     neighbours = get_neighbours(eco.abenv.habitat.h1.matrix, x, y)
-    #     for i in Base.axes(neighbours, 1)
-    #         eco.abenv.habitat.h1.matrix[neighbours[i, 1], neighbours[i, 2]] -= diffusion/length(neighbours)
-    #     end
-    # end
+    x, y = convert_coords(loc, size(eco.abenv.habitat, 1))
+    gs = getgridsize(eco)
+    maxX = size(eco.abenv.habitat.h1, 1)
+    maxY = size(eco.abenv.habitat.h1, 2)
+    if (x > 1) && (x < maxX) && (y > 1) && (y < maxY)
+        update_ghostcells!(eco.abenv.habitat.h1.matrix)
+        diffusion_x = (eco.abenv.habitat.h1.matrix[x + 1, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x - 1, y]) / gs^2
+        diffusion_y = (eco.abenv.habitat.h1.matrix[x, y + 1] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, y - 1]) / gs^2
+        diffusion = 10.0m^2/month * timestep * (diffusion_x + diffusion_y)
+        eco.abenv.habitat.h1.matrix[loc] += diffusion
+        neighbours = get_neighbours(eco.abenv.habitat.h1.matrix, x, y, 8)
+        for i in Base.axes(neighbours, 1)
+            eco.abenv.habitat.h1.matrix[neighbours[i, 1], neighbours[i, 2]] -= diffusion/length(neighbours)
+        end
+    end
 end
