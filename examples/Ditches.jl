@@ -24,7 +24,7 @@ function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path 
     active = Array(.!isnan.(Array(cf)))
     #heatmap(active)
 
-    grid = size(cf); individuals=1_000_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
+    grid = size(cf); individuals=10_000_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
     numMoss = nrow(moss_spp); numShrub = nrow(peat_spp); numSpecies = numMoss + numShrub
 
     mosses = 1:numMoss
@@ -37,7 +37,7 @@ function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path 
 
     #Set up how much energy each species consumes
     req1 = moss_height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numMoss) .* mm ./m
-    req2 = height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numShrub) .* mm ./m
+    req2 = height .* rand(TruncatedNormal(10.0, 0.1, 0, Inf), numShrub) .* mm ./m
     energy_vec = WaterRequirement([req1; req2])
 
     # Set rates for birth and death
@@ -54,10 +54,10 @@ function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path 
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(TruncatedNormal(0.5, 0.05, 0.0, 1.0), numMoss)
-    pref2 = rand(TruncatedNormal(0.3, 0.01, 0.0, 1.0), numShrub)
+    pref1 = rand(TruncatedNormal(0.6, 0.05, 0.0, 1.0), numMoss)
+    pref2 = rand(TruncatedNormal(0.3, 0.05, 0.0, 1.0), numShrub)
     opts = [pref1; pref2]
-    vars = [fill(0.05, numMoss); fill(0.1, numShrub)]
+    vars = [fill(0.05, numMoss); fill(0.05, numShrub)]
     water_traits = GaussTrait(opts, vars)
     ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
     soilDict = Dict("hygrophilous" => [8, 11], "terrestrial" => [1, 4, 5], "terrestrial/hygrophilous" => [1, 4, 5, 8, 11])
@@ -83,6 +83,14 @@ function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path 
 
     @load "data/RainfallBudget_burnin.jld2"
     bud.matrix .*= (timestep / month)
+    # newbud = zeros(typeof(1.0mm), size(bud.matrix))
+    # newbud[:, :, 1] .= bud.matrix[:, :, 1]
+    # meanbud = mean(bud.matrix)
+    # for i in 2:size(bud.matrix, 3)
+    #     newbud[:, :, i] .= (bud.matrix[:, :, i] .- bud.matrix[:, :, i-1])
+    #     newbud[:, :, i] .+= meanbud
+    # end
+    # bud.matrix .= abs.(newbud)
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
@@ -127,18 +135,18 @@ function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path 
             addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
             addtransition!(transitions, SeedDisperse(spp, loc))
             # if spp > numMoss
-                addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
+                addtransition!(transitions, Invasive(spp, loc, 1.0/30days))
             # end
         end
     end
     # Water needs to be used everywhere (with a background rate for where we aren't modelling plants)
     for spp in eachindex(sppl.species.names) 
         for loc in eachindex(abenv.habitat.h1.matrix)
-            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.005, 0.33/1000.0mm))
+            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.02, 0.9/100.0mm))
         end
     end
 
-    # # Add in location based transitions and ditches
+    # Add in location based transitions and ditches
     drains = [ditch_locs; river_locs ...]
     not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
     for loc in drains
@@ -152,18 +160,20 @@ function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path 
         if loc ∈ peat_locs
             κ = 10*30.0m^2/month
             ν = 10*30.0m^2/month
-            fmax = 3.0/month
-            kₛ = 0.01/100mm
-            ϵ = 1.0m^3
+            fmax = 6.0/month
+            kₛ = 0.09/100mm
+            W0 = 0.6
+            k2 = 5.0
         else
             κ = 10*30.0m^2/month
             ν = 10*30.0m^2/month
-            fmax = 3.0/month
-            kₛ = 0.01/100mm
-            ϵ = 1.0m^3
+            fmax = 6.0/month
+            kₛ = 0.09/100mm
+            W0 = 0.5
+            k2 = 5.0
         end
         addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
-        addtransition!(transitions, WaterFlux(loc, fmax, kₛ, ϵ))
+        addtransition!(transitions, WaterFlux(loc, fmax, kₛ, W0, k2))
     end
 
     transitions = specialise_transition_list(transitions)
@@ -207,7 +217,15 @@ for i in trees
 end
 plot!(0:3/12:70, mean(sum(abuns[trees, :, :], dims = 2)[:, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
    colour = :black)
-Plots.pdf("Abuns_new.pdf")
+Plots.pdf("Abuns_new_test.pdf")
+
+abuns_m = reshape(sum(abuns[mosses, :, end], dims = 1)[1, :], size(active))
+heatmap(abuns_m', clim = (0,100))
+abuns_s = reshape(sum(abuns[shrubs, :, end], dims = 1)[1, :], size(active))
+heatmap(abuns_s', clim = (0,100))
+abuns_t = reshape(sum(abuns[trees, :, end], dims = 1)[1, :], size(active))
+heatmap(abuns_t')
+
 
 ## WITH DITCHES ##
 abuns = runPast(timestep, true);
@@ -247,7 +265,7 @@ function runFuture(timestep::Unitful.Time, ditch::Bool = false; save = false, sa
     active = Array(.!isnan.(Array(cf)))
     #heatmap(active)
 
-    grid = size(cf); individuals=1_000_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
+    grid = size(cf); individuals=10_000_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
     numMoss = nrow(moss_spp); numShrub = nrow(peat_spp); numSpecies = numMoss + numShrub
 
     mosses = 1:numMoss
@@ -260,7 +278,7 @@ function runFuture(timestep::Unitful.Time, ditch::Bool = false; save = false, sa
 
     #Set up how much energy each species consumes
     req1 = moss_height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numMoss) .* mm ./m
-    req2 = height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numShrub) .* mm ./m
+    req2 = height .* rand(TruncatedNormal(10.0, 0.1, 0, Inf), numShrub) .* mm ./m
     energy_vec = WaterRequirement([req1; req2])
 
     # Set rates for birth and death
@@ -277,10 +295,10 @@ function runFuture(timestep::Unitful.Time, ditch::Bool = false; save = false, sa
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(TruncatedNormal(0.5, 0.05, 0.0, 1.0), numMoss)
-    pref2 = rand(TruncatedNormal(0.3, 0.01, 0.0, 1.0), numShrub)
+    pref1 = rand(TruncatedNormal(0.6, 0.05, 0.0, 1.0), numMoss)
+    pref2 = rand(TruncatedNormal(0.3, 0.05, 0.0, 1.0), numShrub)
     opts = [pref1; pref2]
-    vars = [fill(0.05, numMoss); fill(0.1, numShrub)]
+    vars = [fill(0.05, numMoss); fill(0.05, numShrub)]
     water_traits = GaussTrait(opts, vars)
     ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
     soilDict = Dict("hygrophilous" => [8, 11], "terrestrial" => [1, 4, 5], "terrestrial/hygrophilous" => [1, 4, 5, 8, 11])
@@ -306,6 +324,14 @@ function runFuture(timestep::Unitful.Time, ditch::Bool = false; save = false, sa
 
     @load "data/RainfallBudget_burnin.jld2"
     bud.matrix .*= (timestep / month)
+    # newbud = zeros(typeof(1.0mm), size(bud.matrix))
+    # newbud[:, :, 1] .= bud.matrix[:, :, 1]
+    # meanbud = mean(bud.matrix)
+    # for i in 2:size(bud.matrix, 3)
+    #     newbud[:, :, i] .= (bud.matrix[:, :, i] .- bud.matrix[:, :, i-1])
+    #     newbud[:, :, i] .+= meanbud
+    # end
+    # bud.matrix .= abs.(newbud)
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
@@ -350,18 +376,18 @@ function runFuture(timestep::Unitful.Time, ditch::Bool = false; save = false, sa
             addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
             addtransition!(transitions, SeedDisperse(spp, loc))
             # if spp > numMoss
-                addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
+                addtransition!(transitions, Invasive(spp, loc, 1.0/30days))
             # end
         end
     end
     # Water needs to be used everywhere (with a background rate for where we aren't modelling plants)
     for spp in eachindex(sppl.species.names) 
         for loc in eachindex(abenv.habitat.h1.matrix)
-            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.02, 0.33/1000.0mm))
+            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.02, 0.9/100.0mm))
         end
     end
 
-    # # Add in location based transitions and ditches
+    # Add in location based transitions and ditches
     drains = [ditch_locs; river_locs ...]
     not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
     for loc in drains
@@ -376,14 +402,14 @@ function runFuture(timestep::Unitful.Time, ditch::Bool = false; save = false, sa
             κ = 10*30.0m^2/month
             ν = 10*30.0m^2/month
             fmax = 6.0/month
-            kₛ = 0.03/100mm
+            kₛ = 0.09/100mm
             W0 = 0.5
             k2 = 5.0
         else
             κ = 10*30.0m^2/month
             ν = 10*30.0m^2/month
             fmax = 6.0/month
-            kₛ = 0.03/100mm
+            kₛ = 0.09/100mm
             W0 = 0.5
             k2 = 5.0
         end
@@ -467,15 +493,15 @@ Plots.pdf("Abuns_future_ditch_new.pdf")
 
 # Plotting for paper
 # Heatmap for mosses
-heatmap(layout = (2,2), size = (1200, 1000), grid = false, aspect_ratio = 1, clim = (0, 100), titlelocation = :left,
+heatmap(layout = (2,2), size = (1200, 1000), grid = false, aspect_ratio = 1, clim = (0, 300), titlelocation = :left,
 left_margin = 10*Plots.mm, guidefont = "Helvetica Bold", guidefontsize = 16, titlefontsize = 18)
-@load "data/Peatland_past_noditch_new.jld2"
+@load "data/Peatland_past_noditch_new_test.jld2"
 sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 1, c = :viridis,
 title = "A", xlab = "Without drainage", ylab = "2010 - 2020 (repeated)", guide_position = :top)
 @load "data/Peatland_past_ditch_new.jld2"
-sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
+sumabuns = Float64.(reshape(sum(abuns[1:numMoss, :, 1], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 2, c = :viridis,
 title = "B", xlab = "With drainage", guide_position = :top)
@@ -492,9 +518,9 @@ title = "D")
 Plots.pdf("plots/Mosses_total_new.pdf")
 
 # Heatmap for shrubs
-heatmap(layout = (2,2), size = (1200, 1000), grid = false, aspect_ratio = 1, clim = (0, 200), titlelocation = :left,
+heatmap(layout = (2,2), size = (1200, 1000), grid = false, aspect_ratio = 1, clim = (0, 50), titlelocation = :left,
 left_margin = 10*Plots.mm, guidefont = "Helvetica Bold", guidefontsize = 16, titlefontsize = 18)
-@load "data/Peatland_past_noditch_new.jld2"
+@load "data/Peatland_past_noditch_new_test.jld2"
 sumabuns = Float64.(reshape(sum(abuns[numMoss+1:end, :, end], dims = 1), size(abenv.habitat.h1.matrix)))
 sumabuns[.!active] .= NaN
 heatmap!(261000.0:10:266000.0, 289000.0:10:293000.0, sumabuns', subplot = 1, c = :viridis,

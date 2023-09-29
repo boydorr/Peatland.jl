@@ -162,7 +162,7 @@ mutable struct Rewet <: AbstractSetUp
     prob::Float64
     length::Unitful.Time
     time::Unitful.Time
-    max::VolType
+    max::Float64
 end
 function Rewet(location::Int64, prob::Float64, length::Unitful.Time, max::Unitful.Volume)
     return Rewet(location, prob, length, 1month, max)

@@ -24,7 +24,7 @@ function runDrying(; save = false, save_path = pwd())
     active = Array(.!isnan.(Array(cf)))
     #heatmap(active)
 
-    grid = size(cf); individuals=1_000_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
+    grid = size(cf); individuals=10_000_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
     numMoss = nrow(moss_spp); numShrub = nrow(peat_spp); numSpecies = numMoss + numShrub
 
     mosses = 1:numMoss
@@ -32,18 +32,19 @@ function runDrying(; save = false, save_path = pwd())
     trees = findall((peat_spp[!, :Type] .== "Tree")) .+ numMoss
 
     height = peat_spp[!, :Plant_height] .* m
+    height[end] = 5.0m # According to PlanAtt this is a more realistic height for Rhododendron
     moss_height = moss_spp[!, :Len] .* mm
 
     #Set up how much energy each species consumes
-    req1 = moss_height .* rand(Normal(1.0, 0.1), numMoss) .* mm ./m
-    req2 = height .* rand(Normal(10.0, 0.1), numShrub) .* mm ./m
+    req1 = moss_height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numMoss) .* mm ./m
+    req2 = height .* rand(TruncatedNormal(10.0, 0.1, 0, Inf), numShrub) .* mm ./m
     energy_vec = WaterRequirement([req1; req2])
 
     # Set rates for birth and death
     birth = 0.1/year
     death = 0.1/year
     longevity = 0.1
-    survival = 0.1
+    survival = 0.01
     boost = 1.0
     # Collect model parameters together
     param = EqualPop(birth, death, longevity, survival, boost)
@@ -53,10 +54,10 @@ function runDrying(; save = false, save_path = pwd())
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(Normal(90.0, 13.0), numMoss) .* m^3 
-    pref2 = rand(Normal(70.0, 18.0), numShrub) .* m^3 
+    pref1 = rand(TruncatedNormal(0.6, 0.05, 0.0, 1.0), numMoss)
+    pref2 = rand(TruncatedNormal(0.3, 0.05, 0.0, 1.0), numShrub)
     opts = [pref1; pref2]
-    vars = [fill(10.0m^3, numMoss); fill(10.0m^3, numShrub)]
+    vars = [fill(0.05, numMoss); fill(0.05, numShrub)]
     water_traits = GaussTrait(opts, vars)
     ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
     soilDict = Dict("hygrophilous" => [8, 11], "terrestrial" => [1, 4, 5], "terrestrial/hygrophilous" => [1, 4, 5, 8, 11])
@@ -78,17 +79,17 @@ function runDrying(; save = false, save_path = pwd())
     file = "data/CF_TPI_smooth.tif"
     tpi = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     tpi.data[tpi.data .< 0] .= 0
+    tpi.data ./= maximum(tpi.data)
 
     @load "data/RainfallBudget_burnin.jld2"
+    bud.matrix .*= (timestep / month)
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
-    abenv = peatlandAE(ele, soil, 10.0m^3, bud, active) 
-    abenv.habitat.h1.matrix .*= tpi.data
-    abenv.habitat.h1.matrix[abenv.habitat.h1.matrix .< 10.0m^3] .= 10.0m^3
+    abenv = peatlandAE(tpi, ele, soil, bud, active)
 
     # Set relationship between species and environment (gaussian)
-    rel = multiplicativeTR3(Gauss{typeof(1.0m^3)}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
+    rel = multiplicativeTR3(Gauss{Float64}(), NoRelContinuous{Float64}(), soilmatch{Int64}())
 
     # Create new transition list
     transitions = TransitionList(true)
@@ -96,31 +97,55 @@ function runDrying(; save = false, save_path = pwd())
     addtransition!(transitions, UpdateEnvironment(update_peat_environment!))
     active_squares = findall(active[1:end])
     peat_squares = findall(soil .== 11)
+    peat_locs = [convert_coords(d[1], d[2], size(cf, 1)) for d in peat_squares]
     # Add in species based transitions (only for active squares)
     for spp in eachindex(sppl.species.names) 
         for loc in active_squares
             addtransition!(transitions, GenerateSeed(spp, loc, sppl.params.birth[spp]))
             addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
             addtransition!(transitions, SeedDisperse(spp, loc))
-            addtransition!(transitions, WaterUse(spp, loc, 0.01))
-            if spp > numMoss
-                addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
-            end
+            # if spp > numMoss
+                addtransition!(transitions, Invasive(spp, loc, 1.0/30days))
+            # end
         end
     end
-    # Add in location based transitions and ditches
-    for loc in eachindex(abenv.habitat.h1.matrix)
-        # if loc ∈ ditch_locations
-        #     drainage = 1.0/month
-        # else
-            drainage = 0.001/month
-        # end
-        κ = 0.01/month
-        λ = 0.01/month
-
-        addtransition!(transitions, LateralFlow(loc, κ, λ))
-        addtransition!(transitions, WaterFlux(loc, drainage, 150.0m^3))
+    # Water needs to be used everywhere (with a background rate for where we aren't modelling plants)
+    for spp in eachindex(sppl.species.names) 
+        for loc in eachindex(abenv.habitat.h1.matrix)
+            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.02, 0.9/100.0mm))
+        end
     end
+
+    # Add in location based transitions and ditches
+    drains = [ditch_locs; river_locs ...]
+    not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
+    for loc in drains
+        drainage = 1.0/month
+        κ = 10 * 30.0m^2/month
+        ν = 10 * 30.0m^2/month
+        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
+        addtransition!(transitions, Drainage(loc, drainage))
+    end
+    for loc in not_drains
+        if loc ∈ peat_locs
+            κ = 10*30.0m^2/month
+            ν = 10*30.0m^2/month
+            fmax = 6.0/month
+            kₛ = 0.09/100mm
+            W0 = 0.6
+            k2 = 5.0
+        else
+            κ = 10*30.0m^2/month
+            ν = 10*30.0m^2/month
+            fmax = 6.0/month
+            kₛ = 0.09/100mm
+            W0 = 0.5
+            k2 = 5.0
+        end
+        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
+        addtransition!(transitions, WaterFlux(loc, fmax, kₛ, W0, k2))
+    end
+    transitions = specialise_transition_list(transitions)
 
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
@@ -146,7 +171,7 @@ function runDrying(; save = false, save_path = pwd())
     println(mean(eco.abenv.habitat.h1.matrix[active]))
 
     for loc in active_squares
-        addtransition!(transitions, Peatland.Rewet(loc, 0.05, 1year, 150.0m^3))
+        addtransition!(transitions, Peatland.Rewet(loc, 0.05, 1year, 1.0))
     end
     @time simulate_record!(abuns2, eco, times2, record_interval, timestep, save = save, save_path = save_path, specialise = true);
     println(mean(eco.abenv.habitat.h1.matrix[active]))
@@ -158,7 +183,7 @@ function runDrying(; save = false, save_path = pwd())
 end
 
 abuns = runDrying();
-@save "/home/claireh/sdc/Peatland/Peatland_baseline.jld2" abuns=abuns[:, :, :, [12,end]]
+@save "/home/claireh/sdc/Peatland/Peatland_baseline_new.jld2" abuns=abuns[:, :, :, [12,end]]
 
 
 plot(grid = false, label = "", layout = (3, 1), left_margin = 1.0*Plots.inch, size = (1000, 1200))

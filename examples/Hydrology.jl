@@ -17,15 +17,18 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
     JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
 
-    moss_spp = filter(f -> (f.Len == findmax(moss_spp.Len)[1]) || (f.Len == findmin(moss_spp.Len)[1]), moss_spp)
-    peat_spp = filter(f -> (f.Plant_height == findmax(peat_spp.Plant_height)[1]) || (f.Plant_height == findmin(peat_spp.Plant_height)[1]), peat_spp)
-
+    # moss_spp = filter(f -> (f.Len == findmax(moss_spp.Len)[1]) || (f.Len == findmin(moss_spp.Len)[1]), moss_spp)
+    # peat_spp = filter(f -> (f.Plant_height == findmax(peat_spp.Plant_height)[1]) || (f.Plant_height == findmin(peat_spp.Plant_height)[1]), peat_spp)
+    # species = rand(1:nrow(peat_spp), 10)
+    # peat_spp = peat_spp[species, :]
+    # species = rand(1:nrow(moss_spp), 10)
+    # moss_spp = moss_spp[species, :]
     file = "data/CF_outline.tif"
     cf = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     active = Array(.!isnan.(Array(cf)))
     #heatmap(active)
 
-    grid = size(cf); individuals=1_000_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
+    grid = size(cf); individuals=10_000_000; area = step(cf.axes[1]) * step(cf.axes[2]) * prod(grid);
     numMoss = nrow(moss_spp); numShrub = nrow(peat_spp); numSpecies = numMoss + numShrub
 
     mosses = 1:numMoss
@@ -37,7 +40,7 @@ function buildEco(timestep::Unitful.Time; ditch = true)
 
     #Set up how much energy each species consumes
     req1 = moss_height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numMoss) .* mm ./m
-    req2 = height .* rand(TruncatedNormal(1.0, 0.1, 0, Inf), numShrub) .* mm ./m
+    req2 = height .* rand(TruncatedNormal(10.0, 0.1, 0, Inf), numShrub) .* mm ./m
     energy_vec = WaterRequirement([req1; req2])
 
     # Set rates for birth and death
@@ -54,10 +57,10 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     movement = BirthOnlyMovement(kernel, NoBoundary())
 
     # Create species list, including their temperature preferences, seed abundance and native status
-    pref1 = rand(TruncatedNormal(0.5, 0.05, 0.0, 1.0), numMoss)
-    pref2 = rand(TruncatedNormal(0.3, 0.01, 0.0, 1.0), numShrub)
+    pref1 = rand(TruncatedNormal(0.6, 0.05, 0.0, 1.0), numMoss)
+    pref2 = rand(TruncatedNormal(0.3, 0.05, 0.0, 1.0), numShrub)
     opts = [pref1; pref2]
-    vars = [fill(0.05, numMoss); fill(0.1, numShrub)]
+    vars = [fill(0.05, numMoss); fill(0.05, numShrub)]
     water_traits = GaussTrait(opts, vars)
     ele_traits = GaussTrait(fill(1.0, numSpecies), fill(20.0, numSpecies))
     soilDict = Dict("hygrophilous" => [8, 11], "terrestrial" => [1, 4, 5], "terrestrial/hygrophilous" => [1, 4, 5, 8, 11])
@@ -83,6 +86,16 @@ function buildEco(timestep::Unitful.Time; ditch = true)
 
     @load "data/RainfallBudget_burnin.jld2"
     bud.matrix .*= (timestep / month)
+    bud.matrix .= mean(bud.matrix)
+    # # Need to detrend and centre around mean
+    # newbud = zeros(typeof(1.0mm), size(bud.matrix))
+    # newbud[:, :, 1] .= bud.matrix[:, :, 1]
+    # meanbud = mean(bud.matrix)
+    # for i in 2:size(bud.matrix, 3)
+    #     newbud[:, :, i] .= (bud.matrix[:, :, i] .- bud.matrix[:, :, i-1])
+    #     newbud[:, :, i] .+= meanbud
+    # end
+    # bud.matrix .= abs.(newbud)
     file = "data/LCM.tif"
     soil = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     soil = Int.(soil)
@@ -127,14 +140,14 @@ function buildEco(timestep::Unitful.Time; ditch = true)
             addtransition!(transitions, DeathProcess(spp, loc, sppl.params.death[spp]))
             addtransition!(transitions, SeedDisperse(spp, loc))
             # if spp > numMoss
-                addtransition!(transitions, Invasive(spp, loc, 10.0/28days))
+            addtransition!(transitions, Invasive(spp, loc, 1.0/30days))
             # end
         end
     end
     # Water needs to be used everywhere (with a background rate for where we aren't modelling plants)
     for spp in eachindex(sppl.species.names) 
         for loc in eachindex(abenv.habitat.h1.matrix)
-            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.02, 0.33/1000.0mm))
+            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.02, 0.8/100.0mm))
         end
     end
 
@@ -153,14 +166,14 @@ function buildEco(timestep::Unitful.Time; ditch = true)
             κ = 10*30.0m^2/month
             ν = 10*30.0m^2/month
             fmax = 6.0/month
-            kₛ = 0.03/100mm
+            kₛ = 0.08/100mm
             W0 = 0.5
             k2 = 5.0
         else
             κ = 10*30.0m^2/month
             ν = 10*30.0m^2/month
             fmax = 6.0/month
-            kₛ = 0.03/100mm
+            kₛ = 0.08/100mm
             W0 = 0.5
             k2 = 5.0
         end
@@ -175,8 +188,8 @@ function buildEco(timestep::Unitful.Time; ditch = true)
 end
 timestep = 1month
 eco = buildEco(timestep, ditch = false)
-envs = zeros(120)
-for i in 1:120
+envs = zeros(360)
+for i in 1:360
     EcoSISTEM.update!(eco, timestep, eco.transitions)
     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
 end
