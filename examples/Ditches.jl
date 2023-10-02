@@ -157,15 +157,19 @@ function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path 
         drainage = 1.0/month
         κ = 10 * 30.0m^2/month
         ν = 10 * 30.0m^2/month
-        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
-        addtransition!(transitions, Drainage(loc, drainage))
+        addtransition!(transitions, LateralFlow(loc, κ, ν))
+        κ = 0.001m^2/month
+        ν = 0.001m^2/month
+        addtransition!(transitions, Drainage(loc, drainage, κ, ν))
     end
     for loc in neighbour_drains
         drainage = 0.0/month
-        κ = 10 * 30.0m^2/month
-        ν = 10 * 30.0m^2/month
-        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
-        addtransition!(transitions, Drainage(loc, drainage))
+        κ = 1 * 30.0m^2/month
+        ν = 1 * 30.0m^2/month
+        addtransition!(transitions, LateralFlow(loc, κ, ν))
+        κ = 0.001m^2/month
+        ν = 0.001m^2/month
+        addtransition!(transitions, Drainage(loc, drainage, κ, ν))
     end
     for loc in not_drains
         if loc ∈ peat_locs
@@ -183,7 +187,7 @@ function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path 
             W0 = 0.5
             k2 = 5.0
         end
-        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
+        addtransition!(transitions, LateralFlow(loc, κ, ν))
         addtransition!(transitions, WaterFlux(loc, fmax, kₛ, W0, k2))
     end
 

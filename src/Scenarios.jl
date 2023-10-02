@@ -230,11 +230,10 @@ mutable struct LateralFlow <: AbstractStateTransition
     location::Int64
     κ::AreaTimeType
     λ::AreaTimeType
-    ditch::Bool
-    function LateralFlow(location::Int64, κ::A1, λ::A2; ditch::Bool = false) where {A1 , A2}
+    function LateralFlow(location::Int64, κ::A1, λ::A2) where {A1 , A2}
         κnew = uconvert(unit(AreaTimeType), κ)
         λnew = uconvert(unit(AreaTimeType), λ)
-        return new(location, κnew, λnew, ditch)
+        return new(location, κnew, λnew)
     end
 end
 
@@ -249,65 +248,27 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, 
     gs = getgridsize(eco)
     maxX = size(eco.abenv.habitat, 1)
     maxY = size(eco.abenv.habitat, 2)
-    #if (x > 1) && (x < maxX) && (y > 1) && (y < maxY)
-        # update_ghostcells!(eco.abenv.habitat.h1.matrix)
-        minusx = 1 < x - 1 ? x - 1 : maxX
-        plusx = x + 1 < maxX ? x + 1 : 1
-        minusy = 1 < y - 1 ? y - 1 : maxY
-        plusy = y + 1 < maxY ? y + 1 : 1
+    minusx = 1 < x - 1 ? x - 1 : maxX
+    plusx = x + 1 < maxX ? x + 1 : 1
+    minusy = 1 < y - 1 ? y - 1 : maxY
+    plusy = y + 1 < maxY ? y + 1 : 1
 
-        u1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - eco.abenv.habitat.h2.matrix[minusx, y]) / 2gs
-        u2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[minusx, y]) / gs^2
-        v1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - eco.abenv.habitat.h2.matrix[x, minusy]) / 2gs
-        v2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, minusy]) / gs^2
-        advection_x1 =  u1 * (eco.cache.surfacewater[plusx, y] - eco.cache.surfacewater[minusx, y]) / 2gs
-        advection_x2 = u2 * eco.cache.surfacewater[x, y]
-        advection_y1 = v1 * (eco.cache.surfacewater[x, plusy] - eco.cache.surfacewater[x, minusy]) / 2gs
-        advection_y2 = v2 * eco.cache.surfacewater[x, y]
-        advection = advection_x1 + advection_x2 + advection_y1 + advection_y2
+    u1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - eco.abenv.habitat.h2.matrix[minusx, y]) / 2gs
+    u2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[minusx, y]) / gs^2
+    v1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - eco.abenv.habitat.h2.matrix[x, minusy]) / 2gs
+    v2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, minusy]) / gs^2
+    advection_x1 =  u1 * (eco.cache.surfacewater[plusx, y] - eco.cache.surfacewater[minusx, y]) / 2gs
+    advection_x2 = u2 * eco.cache.surfacewater[x, y]
+    advection_y1 = v1 * (eco.cache.surfacewater[x, plusy] - eco.cache.surfacewater[x, minusy]) / 2gs
+    advection_y2 = v2 * eco.cache.surfacewater[x, y]
+    advection = advection_x1 + advection_x2 + advection_y1 + advection_y2
 
-        diffusion_x = (eco.cache.surfacewater[plusx, y] - 2*eco.cache.surfacewater[x, y] + eco.cache.surfacewater[minusx, y]) / gs^2
-        diffusion_y = (eco.cache.surfacewater[x, plusy] - 2*eco.cache.surfacewater[x, y] + eco.cache.surfacewater[x, minusy]) / gs^2
-        diffusion = rule.κ * timestep * (diffusion_x + diffusion_y)
+    diffusion_x = (eco.cache.surfacewater[plusx, y] - 2*eco.cache.surfacewater[x, y] + eco.cache.surfacewater[minusx, y]) / gs^2
+    diffusion_y = (eco.cache.surfacewater[x, plusy] - 2*eco.cache.surfacewater[x, y] + eco.cache.surfacewater[x, minusy]) / gs^2
+    diffusion = rule.κ * timestep * (diffusion_x + diffusion_y)
 
-        eco.cache.surfacemigration[loc] += diffusion + advection 
-
-        # if rule.ditch 
-        #     #update_ghostcells!(eco.abenv.habitat.h1.matrix)
-        #     diffusion_x = (eco.abenv.habitat.h1.matrix[plusx, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[minusx, y]) / gs^2
-        #     diffusion_y = (eco.abenv.habitat.h1.matrix[x, plusy] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, minusy]) / gs^2
-        #     diffusion = rule.κ/100.0 * timestep * (diffusion_x + diffusion_y)
-        #     eco.cache.watermigration[loc] += diffusion
-        # end
-    #end
+    eco.cache.surfacemigration[loc] += diffusion + advection 
 end
-
-# function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
-#     loc = rule.location
-#     x, y = convert_coords(loc, size(eco.abenv.habitat, 1))
-#     gs = getgridsize(eco)
-#     maxX = size(eco.abenv.habitat, 1)
-#     maxY = size(eco.abenv.habitat, 2)
-#     if (x > 1) && (x < maxX) && (y > 1) && (y < maxY)
-#         update_ghostcells!(eco.abenv.habitat.h1.matrix)
-
-#         u1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x + 1, y] - eco.abenv.habitat.h2.matrix[x - 1, y]) / 2gs
-#         u2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x + 1, y] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x - 1, y]) / gs^2
-#         v1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - eco.abenv.habitat.h2.matrix[x, y - 1]) / 2gs
-#         v2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, y + 1] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, y - 1]) / gs^2
-#         advection_x1 =  u1 * (eco.abenv.habitat.h1.matrix[x + 1, y] - eco.abenv.habitat.h1.matrix[x - 1, y]) / 2gs
-#         advection_x2 = u2 * eco.abenv.habitat.h1.matrix[x, y]
-#         advection_y1 = v1 * (eco.abenv.habitat.h1.matrix[x, y + 1] - eco.abenv.habitat.h1.matrix[x, y - 1]) / 2gs
-#         advection_y2 = v2 * eco.abenv.habitat.h1.matrix[x, y]
-#         advection = advection_x1 + advection_x2 + advection_y1 + advection_y2
-
-#         diffusion_x = (eco.abenv.habitat.h1.matrix[x + 1, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x - 1, y]) / gs^2
-#         diffusion_y = (eco.abenv.habitat.h1.matrix[x, y + 1] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, y - 1]) / gs^2
-#         diffusion = rule.κ * timestep * (diffusion_x + diffusion_y)
-
-#         eco.cache.watermigration[loc] += diffusion + advection
-#     end
-# end
 
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::LateralFlow, timestep::Unitful.Time) where {A, B, H <: ContinuousHab}
     loc = rule.location
@@ -327,9 +288,13 @@ end
 mutable struct Drainage <: AbstractSetUp
     location::Int64
     drainage::DayType
-    function Drainage(location::Int64, drainage::T) where T
+    κ::AreaTimeType
+    λ::AreaTimeType
+    function Drainage(location::Int64, drainage::T, κ::A1, λ::A2) where {T, A1, A2}
+        κnew = uconvert(unit(AreaTimeType), κ)
+        λnew = uconvert(unit(AreaTimeType), λ)
         drainage = uconvert(unit(DayType), drainage)
-        new(location, drainage)
+        new(location, drainage, κnew, λnew)
     end
 end
 
@@ -359,27 +324,22 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Drainage, tim
     gs = getgridsize(eco)
     maxX = size(eco.abenv.habitat.h1, 1)
     maxY = size(eco.abenv.habitat.h1, 2)
+    minusx = 1 < x - 1 ? x - 1 : maxX
+    plusx = x + 1 < maxX ? x + 1 : 1
+    minusy = 1 < y - 1 ? y - 1 : maxY
+    plusy = y + 1 < maxY ? y + 1 : 1
 
-    # neighbours = get_neighbours(eco.abenv.habitat.h1.matrix, x, y, 1)
-    # for n in neighbours
-    #     x, y = n
-        minusx = 1 < x - 1 ? x - 1 : maxX
-        plusx = x + 1 < maxX ? x + 1 : 1
-        minusy = 1 < y - 1 ? y - 1 : maxY
-        plusy = y + 1 < maxY ? y + 1 : 1
-
-        diffusion_x = (eco.abenv.habitat.h1.matrix[plusx, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[minusx, y]) / gs^2
-        diffusion_y = (eco.abenv.habitat.h1.matrix[x, plusy] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, minusy]) / gs^2
-        diffusion = 1.0m^2/month * timestep * (diffusion_x + diffusion_y)
-        u1 = 1.0m^2/month * timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - eco.abenv.habitat.h2.matrix[minusx, y]) / 2gs
-        u2 = 1.0m^2/month* timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[minusx, y]) / gs^2
-        v1 = 1.0m^2/month * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - eco.abenv.habitat.h2.matrix[x, minusy]) / 2gs
-        v2 = 1.0m^2/month * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, minusy]) / gs^2
-        advection_x1 =  u1 * (eco.abenv.habitat.h1.matrix[plusx, y] - eco.abenv.habitat.h1.matrix[minusx, y]) / 2gs
-        advection_x2 = u2 * eco.abenv.habitat.h1.matrix[x, y]
-        advection_y1 = v1 * (eco.abenv.habitat.h1.matrix[x, plusy] - eco.abenv.habitat.h1.matrix[x, minusy]) / 2gs
-        advection_y2 = v2 * eco.abenv.habitat.h1.matrix[x, y]
-        advection = advection_x1 + advection_x2 + advection_y1 + advection_y2
-        eco.cache.watermigration[x, y] += diffusion + advection
-    # end
+    diffusion_x = (eco.abenv.habitat.h1.matrix[plusx, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[minusx, y]) / gs^2
+    diffusion_y = (eco.abenv.habitat.h1.matrix[x, plusy] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, minusy]) / gs^2
+    diffusion = rule.κ * timestep * (diffusion_x + diffusion_y)
+    u1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - eco.abenv.habitat.h2.matrix[minusx, y]) / 2gs
+    u2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[minusx, y]) / gs^2
+    v1 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - eco.abenv.habitat.h2.matrix[x, minusy]) / 2gs
+    v2 = rule.λ * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, minusy]) / gs^2
+    advection_x1 =  u1 * (eco.abenv.habitat.h1.matrix[plusx, y] - eco.abenv.habitat.h1.matrix[minusx, y]) / 2gs
+    advection_x2 = u2 * eco.abenv.habitat.h1.matrix[x, y]
+    advection_y1 = v1 * (eco.abenv.habitat.h1.matrix[x, plusy] - eco.abenv.habitat.h1.matrix[x, minusy]) / 2gs
+    advection_y2 = v2 * eco.abenv.habitat.h1.matrix[x, y]
+    advection = advection_x1 + advection_x2 + advection_y1 + advection_y2
+    eco.cache.watermigration[x, y] += diffusion + advection
 end
