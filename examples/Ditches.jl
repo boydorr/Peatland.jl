@@ -146,11 +146,22 @@ function runPast(timestep::Unitful.Time, ditch = false; save = false, save_path 
         end
     end
 
-    # Add in location based transitions and ditches
+    # # Add in location based transitions and ditches
     drains = [ditch_locs; river_locs ...]
-    not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
+    xys = convert_coords.(drains, size(active, 1))
+    neighbours = [Peatland.get_neighbours(active, i[1], i[2], 2) for i in xys]
+    neighbours = unique(vcat(neighbours...))
+    neighbour_drains = [convert_coords(n[1], n[2], size(active, 1)) for n in neighbours]
+    not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), vcat(drains, neighbour_drains))
     for loc in drains
         drainage = 1.0/month
+        κ = 10 * 30.0m^2/month
+        ν = 10 * 30.0m^2/month
+        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
+        addtransition!(transitions, Drainage(loc, drainage))
+    end
+    for loc in neighbour_drains
+        drainage = 0.0/month
         κ = 10 * 30.0m^2/month
         ν = 10 * 30.0m^2/month
         addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))

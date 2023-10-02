@@ -6,7 +6,7 @@ using Unitful
 
 import EcoSISTEM: DayType, AbstractPlaceTransition, AbstractStateTransition, AbstractSetUp, AbstractWindDown,
 AbstractAbiotic, _run_rule!, getspecies, getlocation, getprob, TimeType, Lookup, _getdimension,
-_symmetric_grid, move!, get_neighbours, convert_coords
+_symmetric_grid, move!, convert_coords
 const WaterTimeType = typeof(1.0m^3/day)
 const AreaTimeType = typeof(1.0m^2/day)
 const VolType = typeof(1.0m^3)
@@ -333,6 +333,20 @@ mutable struct Drainage <: AbstractSetUp
     end
 end
 
+function get_neighbours(mat::Matrix, x_coord::Int64, y_coord::Int64, radius::Int64=1)
+    # Calculate dimensions
+    dims=size(mat)
+    x_coord <= dims[1] && y_coord <= dims[2] || error("Coordinates outside grid")
+    # Find oroducts of all xs and ys in each direction
+    xs = collect(x_coord-radius:1:x_coord+radius)
+    ys = collect(y_coord-radius:1:y_coord+radius)
+    neighbour_vec = collect(Iterators.product(xs, ys))[1:end]
+    # Remove answers outside of the dimensions of the matrix
+    keep = [(n[1] >= 1) & (n[1] <= dims[1]) & (n[2] >= 1) & (n[2] <= dims[2]) for n in neighbour_vec]
+    neighbour_vec=neighbour_vec[keep,:]
+    return neighbour_vec
+  end
+
 function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Drainage, timestep::Unitful.Time) where {A, B, H <: Union{HabitatCollection2, HabitatCollection3}}
     loc = rule.location
     hab = eco.cache.surfacewater[loc]
@@ -341,20 +355,31 @@ function _run_rule!(eco::Ecosystem{A, GridAbioticEnv{H, B}}, rule::Drainage, tim
     hab = eco.abenv.habitat.h1.matrix[loc]
     drainage = rule.drainage * timestep * hab
     eco.abenv.habitat.h1.matrix[loc] = max(zero(typeof(drainage)), hab - drainage)
-
     x, y = convert_coords(loc, size(eco.abenv.habitat, 1))
     gs = getgridsize(eco)
     maxX = size(eco.abenv.habitat.h1, 1)
     maxY = size(eco.abenv.habitat.h1, 2)
-    if (x > 1) && (x < maxX) && (y > 1) && (y < maxY)
-        update_ghostcells!(eco.abenv.habitat.h1.matrix)
-        diffusion_x = (eco.abenv.habitat.h1.matrix[x + 1, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x - 1, y]) / gs^2
-        diffusion_y = (eco.abenv.habitat.h1.matrix[x, y + 1] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, y - 1]) / gs^2
-        diffusion = 10.0m^2/month * timestep * (diffusion_x + diffusion_y)
-        eco.abenv.habitat.h1.matrix[loc] += diffusion
-        neighbours = get_neighbours(eco.abenv.habitat.h1.matrix, x, y, 8)
-        for i in Base.axes(neighbours, 1)
-            eco.abenv.habitat.h1.matrix[neighbours[i, 1], neighbours[i, 2]] -= diffusion/length(neighbours)
-        end
-    end
+
+    # neighbours = get_neighbours(eco.abenv.habitat.h1.matrix, x, y, 1)
+    # for n in neighbours
+    #     x, y = n
+        minusx = 1 < x - 1 ? x - 1 : maxX
+        plusx = x + 1 < maxX ? x + 1 : 1
+        minusy = 1 < y - 1 ? y - 1 : maxY
+        plusy = y + 1 < maxY ? y + 1 : 1
+
+        diffusion_x = (eco.abenv.habitat.h1.matrix[plusx, y] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[minusx, y]) / gs^2
+        diffusion_y = (eco.abenv.habitat.h1.matrix[x, plusy] - 2*eco.abenv.habitat.h1.matrix[x, y] + eco.abenv.habitat.h1.matrix[x, minusy]) / gs^2
+        diffusion = 1.0m^2/month * timestep * (diffusion_x + diffusion_y)
+        u1 = 1.0m^2/month * timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - eco.abenv.habitat.h2.matrix[minusx, y]) / 2gs
+        u2 = 1.0m^2/month* timestep * (eco.abenv.habitat.h2.matrix[plusx, y] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[minusx, y]) / gs^2
+        v1 = 1.0m^2/month * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - eco.abenv.habitat.h2.matrix[x, minusy]) / 2gs
+        v2 = 1.0m^2/month * timestep * (eco.abenv.habitat.h2.matrix[x, plusy] - 2 * eco.abenv.habitat.h2.matrix[x, y] + eco.abenv.habitat.h2.matrix[x, minusy]) / gs^2
+        advection_x1 =  u1 * (eco.abenv.habitat.h1.matrix[plusx, y] - eco.abenv.habitat.h1.matrix[minusx, y]) / 2gs
+        advection_x2 = u2 * eco.abenv.habitat.h1.matrix[x, y]
+        advection_y1 = v1 * (eco.abenv.habitat.h1.matrix[x, plusy] - eco.abenv.habitat.h1.matrix[x, minusy]) / 2gs
+        advection_y2 = v2 * eco.abenv.habitat.h1.matrix[x, y]
+        advection = advection_x1 + advection_x2 + advection_y1 + advection_y2
+        eco.cache.watermigration[x, y] += diffusion + advection
+    # end
 end
