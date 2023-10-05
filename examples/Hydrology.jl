@@ -13,16 +13,16 @@ using CSV
 using Distances
 using Diversity
 
-function buildEco(timestep::Unitful.Time; ditch = true)
+function buildEco(timestep::Unitful.Time; ditch = true, specialise=true)
     JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
     JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
 
     # moss_spp = filter(f -> (f.Len == findmax(moss_spp.Len)[1]) || (f.Len == findmin(moss_spp.Len)[1]), moss_spp)
     # peat_spp = filter(f -> (f.Plant_height == findmax(peat_spp.Plant_height)[1]) || (f.Plant_height == findmin(peat_spp.Plant_height)[1]), peat_spp)
-    # species = rand(1:nrow(peat_spp), 10)
-    # peat_spp = peat_spp[species, :]
-    # species = rand(1:nrow(moss_spp), 10)
-    # moss_spp = moss_spp[species, :]
+    species = rand(1:nrow(peat_spp), 10)
+    peat_spp = peat_spp[species, :]
+    species = rand(1:nrow(moss_spp), 10)
+    moss_spp = moss_spp[species, :]
     file = "data/CF_outline.tif"
     cf = readfile(file, 261000.0m, 266000.0m, 289000.0m, 293000.0m)
     active = Array(.!isnan.(Array(cf)))
@@ -147,49 +147,58 @@ function buildEco(timestep::Unitful.Time; ditch = true)
     # Water needs to be used everywhere (with a background rate for where we aren't modelling plants)
     for spp in eachindex(sppl.species.names) 
         for loc in eachindex(abenv.habitat.h1.matrix)
-            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.02, 0.8/100.0mm))
+            addtransition!(transitions, WaterUse(spp, loc, 1.0, 0.02, 0.6/100.0mm))
         end
     end
 
     # # Add in location based transitions and ditches
     drains = [ditch_locs; river_locs ...]
-    not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
+    xys = convert_coords.(drains, size(active, 1))
+    neighbours = [Peatland.get_neighbours(active, i[1], i[2], 2) for i in xys]
+    neighbours = unique(vcat(neighbours...))
+    neighbour_drains = [convert_coords(n[1], n[2], size(active, 1)) for n in neighbours]
+    not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), vcat(drains, neighbour_drains))
     for loc in drains
         drainage = 1.0/month
-        κ = 10 * 30.0m^2/month
-        ν = 10 * 30.0m^2/month
-        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
-        addtransition!(transitions, Drainage(loc, drainage))
+        κ = 1 * 30.0m^2/month
+        ν = 1 * 30.0m^2/month
+        addtransition!(transitions, LateralFlow(loc, κ, ν))
+        κ = 0.001m^2/month
+        ν = 0.001m^2/month
+        addtransition!(transitions, Drainage(loc, drainage, κ, ν))
+    end
+    for loc in neighbour_drains
+        drainage = 0.0/month
+        κ = 1 * 3.0m^2/month
+        ν = 1 * 3.0m^2/month
+        addtransition!(transitions, LateralFlow(loc, κ, ν))
+        κ = 0.001m^2/month
+        ν = 0.001m^2/month
+        addtransition!(transitions, Drainage(loc, drainage, κ, ν))
     end
     for loc in not_drains
-        if loc ∈ peat_locs
-            κ = 10*30.0m^2/month
-            ν = 10*30.0m^2/month
-            fmax = 6.0/month
-            kₛ = 0.08/100mm
-            W0 = 0.5
-            k2 = 5.0
-        else
-            κ = 10*30.0m^2/month
-            ν = 10*30.0m^2/month
-            fmax = 6.0/month
-            kₛ = 0.08/100mm
-            W0 = 0.5
-            k2 = 5.0
-        end
-        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
+        κ = 10*30.0m^2/month
+        ν = 10*30.0m^2/month
+        fmax = 6.0/month
+        kₛ = 0.06/100mm
+        W0 = 0.5
+        k2 = 5.0
+       
+        addtransition!(transitions, LateralFlow(loc, κ, ν))
         addtransition!(transitions, WaterFlux(loc, fmax, kₛ, W0, k2))
     end
 
-    transitions = specialise_transition_list(transitions)
+    if specialise
+        transitions = specialise_transition_list(transitions)
+    end
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
     return eco
 end
 timestep = 1month
 eco = buildEco(timestep, ditch = false)
-envs = zeros(360)
-for i in 1:360
+envs = zeros(120)
+for i in 1:120
     EcoSISTEM.update!(eco, timestep, eco.transitions)
     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
 end
@@ -208,6 +217,37 @@ heatmap(abuns_s')
 eco = buildEco(timestep, ditch = true)
 envs = zeros(120)
 for i in 1:120
+    EcoSISTEM.update!(eco, timestep, eco.transitions)
+    envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
+end
+heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
+heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 100), subplot = 2)
+plot(envs)
+
+
+eco = buildEco(timestep, specialise = false)
+envs = zeros(36)
+for i in 1:12
+    EcoSISTEM.update!(eco, timestep, eco.transitions)
+    envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
+end
+heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
+heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 100), subplot = 2)
+
+for loc in active_squares
+    addtransition!(eco.transitions, Peatland.Dry(loc, 0.05, 1year))
+end
+for i in 13:24
+    EcoSISTEM.update!(eco, timestep, eco.transitions)
+    envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
+end
+heatmap(ustrip.(eco.abenv.habitat.h1.matrix)', clim = (0, 1), size = (1000, 600), layout = 2)
+heatmap!(ustrip.(eco.cache.surfacewater)', clim = (0, 100), subplot = 2)
+
+for loc in active_squares
+    addtransition!(eco.transitions, Peatland.Rewet(loc, 0.05, 1year, 1.0))
+end
+for i in 25:36
     EcoSISTEM.update!(eco, timestep, eco.transitions)
     envs[i] = ustrip.(mean(eco.abenv.habitat.h1.matrix[eco.abenv.active]))
 end

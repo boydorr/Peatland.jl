@@ -15,7 +15,7 @@ using Shapefile
 using Diversity
 
 ### HISTORIC RAINFALL DATA 2010 - 2020 (REPEATED) ###
-function runDrying(; save = false, save_path = pwd())
+function runDrying(timestep::Unitful.Time; save = false, save_path = pwd())
     JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
     JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
 
@@ -116,17 +116,8 @@ function runDrying(; save = false, save_path = pwd())
         end
     end
 
-    # Add in location based transitions and ditches
-    drains = [ditch_locs; river_locs ...]
-    not_drains = setdiff(eachindex(abenv.habitat.h1.matrix), drains)
-    for loc in drains
-        drainage = 1.0/month
-        κ = 10 * 30.0m^2/month
-        ν = 10 * 30.0m^2/month
-        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
-        addtransition!(transitions, Drainage(loc, drainage))
-    end
-    for loc in not_drains
+    # Add in location based transitions
+    for loc in active_squares
         if loc ∈ peat_locs
             κ = 10*30.0m^2/month
             ν = 10*30.0m^2/month
@@ -142,17 +133,16 @@ function runDrying(; save = false, save_path = pwd())
             W0 = 0.5
             k2 = 5.0
         end
-        addtransition!(transitions, LateralFlow(loc, κ, ν, ditch = ditch))
+        addtransition!(transitions, LateralFlow(loc, κ, ν))
         addtransition!(transitions, WaterFlux(loc, fmax, kₛ, W0, k2))
     end
-    transitions = specialise_transition_list(transitions)
 
     # Create ecosystem
     eco = PeatSystem(sppl, abenv, rel, transitions = transitions)
 
     # Run simulation
     # Simulation Parameters
-    burnin = 30year; times1 = 10year; times2 = 10year; timestep = 1month;
+    burnin = 30year; times1 = 10year; times2 = 10year; 
     record_interval = 3months
     lensim = length(0years:record_interval:burnin)
     lensim1 = length(0years:record_interval:times1)
@@ -165,13 +155,13 @@ function runDrying(; save = false, save_path = pwd())
     println(mean(eco.abenv.habitat.h1.matrix[active]))
 
     for loc in active_squares
-        addtransition!(transitions, Peatland.Dry(loc, 0.05, 1year))
+        addtransition!(transitions, Peatland.Dry(loc, 0.3, 1year))
     end
     @time simulate_record!(abuns1, eco, times1, record_interval, timestep, save = save, save_path = save_path, specialise = true);
     println(mean(eco.abenv.habitat.h1.matrix[active]))
 
     for loc in active_squares
-        addtransition!(transitions, Peatland.Rewet(loc, 0.05, 1year, 1.0))
+        addtransition!(transitions, Peatland.Rewet(loc, 0.3, 1year, 1.0))
     end
     @time simulate_record!(abuns2, eco, times2, record_interval, timestep, save = save, save_path = save_path, specialise = true);
     println(mean(eco.abenv.habitat.h1.matrix[active]))
@@ -182,7 +172,7 @@ function runDrying(; save = false, save_path = pwd())
     return abuns
 end
 
-abuns = runDrying();
+abuns = runDrying(1month);
 @save "/home/claireh/sdc/Peatland/Peatland_baseline_new.jld2" abuns=abuns[:, :, :, [12,end]]
 
 
@@ -209,10 +199,10 @@ end
 plot!(0:3/12:30.75, mean(sum(abuns[trees, :, :, 80:end], dims = (2, 3))[:, 1, 1, :], dims = 1)[1, :], grid = false, label = "", subplot = 3,
    colour = :black)
 vline!([10, 20], subplot = 3, color = :black, lty = :dot, label = "")
-Plots.pdf("Abuns_baseline.pdf")
+Plots.pdf("Abuns_baseline_new.pdf")
 
 
-@load "data/Peatland_baseline.jld2"
+@load "data/Peatland_baseline_new.jld2"
 JLD2.@load("data/Peat_30_spp.jld2", peat_spp)
 JLD2.@load("data/Peat_30_moss.jld2", moss_spp)
 numMoss = nrow(moss_spp); numShrub = nrow(peat_spp); numSpecies = numMoss + numShrub
